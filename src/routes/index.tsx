@@ -781,6 +781,36 @@ function LinkModal({
   );
 }
 
+/* ─────────── QR modal (layout only) ─────────── */
+function QrModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalShell onClose={onClose}>
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
+        <QrCode className="h-5 w-5 text-white/85" strokeWidth={1.5} />
+      </div>
+      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">Escanear QR da loja</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        Aponte a câmera para o QR de uma peça na loja. Ela abre aqui automaticamente — depois é só enviar sua foto.
+      </p>
+      <div className="glass mt-5 flex aspect-square w-full items-center justify-center rounded-3xl">
+        <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02]">
+          <QrCode className="h-10 w-10 text-white/40" strokeWidth={1.25} />
+        </div>
+      </div>
+      <p className="mt-4 text-center text-[11px] text-muted-foreground">
+        Em breve na sua loja parceira.
+      </p>
+      <button
+        onClick={onClose}
+        className="btn-brand mt-5 w-full rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+      >
+        Entendi
+      </button>
+    </ModalShell>
+  );
+}
+
+
 /* ─────────── Pro modal ─────────── */
 function ProModal({ onClose }: { onClose: () => void }) {
   return (
