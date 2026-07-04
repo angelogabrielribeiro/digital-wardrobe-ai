@@ -26,10 +26,18 @@ import {
   Shield,
   LogOut,
   Images,
+  QrCode,
 } from "lucide-react";
 import { generateTryOnLook } from "@/lib/tryon.functions";
-import beforeImg from "@/assets/before-model.jpg";
-import afterImg from "@/assets/after-model.jpg";
+import ba1Before from "@/assets/ba-1-before.jpg";
+import ba1After from "@/assets/ba-1-after.jpg";
+import ba2Before from "@/assets/ba-2-before.jpg";
+import ba2After from "@/assets/ba-2-after.jpg";
+
+const BA_PAIRS: Array<{ before: string; after: string; label: string }> = [
+  { before: ba1Before, after: ba1After, label: "Camiseta básica" },
+  { before: ba2Before, after: ba2After, label: "Jaqueta aplicada" },
+];
 
 export const Route = createFileRoute("/")({
   component: AuraFitApp,
@@ -202,32 +210,29 @@ function Home({
   onCategory: (c: UiCategory) => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-16 px-6 pt-14 pb-32 fade-in">
+    <div className="flex flex-1 flex-col gap-14 px-6 pt-14 pb-32 fade-in">
       {/* Hero */}
       <header className="fade-up">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[color:var(--border-strong)] bg-white/[0.02] px-3 py-1.5 text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          <span className="inline-block h-1 w-1 rounded-full bg-brand" />
-          Provador virtual
-        </div>
-        <h1 className="font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
-          Veja como a roupa<br />fica antes de comprar.
-        </h1>
-        <p className="mt-5 max-w-[300px] text-[15px] leading-relaxed text-muted-foreground">
-          Experimente qualquer peça em segundos.
+        <p className="text-[13px] font-medium text-muted-foreground">
+          Veja como fica antes de comprar.
         </p>
+        <h1 className="mt-3 font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
+          Escolha uma roupa.<br />
+          Use sua foto.<br />
+          <span className="text-gradient-violet">Veja como ela fica.</span>
+        </h1>
         <button
           onClick={onStart}
           className="btn-brand mt-8 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-medium active:scale-[0.98] transition-transform"
         >
-          Experimentar agora
+          Ver como fica
           <ArrowRight className="h-4 w-4" strokeWidth={2} />
         </button>
       </header>
 
       {/* Before/After */}
       <section className="fade-up" style={{ animationDelay: "80ms" }}>
-        <SectionLabel>Antes e depois</SectionLabel>
-        <BeforeAfter before={beforeImg} after={afterImg} />
+        <BeforeAfterShowcase />
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Arraste para comparar.
         </p>
@@ -238,9 +243,9 @@ function Home({
         <SectionLabel>Como funciona</SectionLabel>
         <div className="flex flex-col gap-3">
           {[
-            { n: "01", t: "Envie sua foto." },
-            { n: "02", t: "Escolha uma peça." },
-            { n: "03", t: "Veja em você." },
+            { n: "01", t: "Escolha uma roupa." },
+            { n: "02", t: "Use sua foto." },
+            { n: "03", t: "Veja como ela fica." },
           ].map((s) => (
             <div key={s.n} className="glass flex items-center gap-5 rounded-2xl px-5 py-4">
               <span className="font-display text-lg font-medium text-gradient-violet">{s.n}</span>
@@ -280,6 +285,31 @@ function Home({
           {STORE.storeName ? STORE.storeName : "Powered by AuraFit"}
         </p>
       </footer>
+    </div>
+  );
+}
+
+/* ─────────── Before/After showcase (rotates real examples) ─────────── */
+function BeforeAfterShowcase() {
+  const [idx, setIdx] = useState(0);
+  const pair = BA_PAIRS[idx];
+  return (
+    <div>
+      <BeforeAfter before={pair.before} after={pair.after} autoAnimate />
+      {BA_PAIRS.length > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          {BA_PAIRS.map((p, i) => (
+            <button
+              key={p.label}
+              onClick={() => setIdx(i)}
+              aria-label={p.label}
+              className={`h-1.5 rounded-full transition-all ${
+                i === idx ? "w-6 bg-white/90" : "w-1.5 bg-white/25 hover:bg-white/50"
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -327,18 +357,39 @@ function CategoryCard({
 }
 
 /* ─────────── Before / After slider ─────────── */
-function BeforeAfter({ before, after }: { before: string; after: string }) {
+function BeforeAfter({ before, after, autoAnimate }: { before: string; after: string; autoAnimate?: boolean }) {
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const userInteracted = useRef(false);
+
+  useEffect(() => {
+    if (!autoAnimate) return;
+    // Subtle invitation: nudge divider a few pixels, then settle.
+    const start = performance.now();
+    const duration = 1800;
+    let raf = 0;
+    const tick = (now: number) => {
+      if (userInteracted.current) return;
+      const t = Math.min(1, (now - start) / duration);
+      // Two gentle oscillations then rest at 50.
+      const wobble = Math.sin(t * Math.PI * 2) * 6 * (1 - t);
+      setPos(50 + wobble);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [autoAnimate, before, after]);
 
   function updateFromClientX(clientX: number) {
     const el = ref.current;
     if (!el) return;
+    userInteracted.current = true;
     const rect = el.getBoundingClientRect();
     const p = ((clientX - rect.left) / rect.width) * 100;
     setPos(Math.max(0, Math.min(100, p)));
   }
+
 
   return (
     <div
@@ -410,6 +461,7 @@ function TryOn(props: {
   onPro: () => void;
 }) {
   const [linkModal, setLinkModal] = useState(false);
+  const [qrModal, setQrModal] = useState(false);
 
   const categories: Array<{
     id: UiCategory;
@@ -431,28 +483,17 @@ function TryOn(props: {
           Experimentar
         </p>
         <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">
-          Veja em você em<br />segundos.
+          Veja como fica<br />em você.
         </h1>
       </header>
 
-      {/* Step 1 */}
-      <StepBlock number="1" title="Envie sua foto" hint="Use uma foto de corpo inteiro, com boa luz.">
-        <ImageUpload
-          value={props.modelImage}
-          onChange={props.setModelImage}
-          primaryLabel="Tirar foto"
-          secondaryLabel="Escolher da galeria"
-          captureCamera
-        />
-      </StepBlock>
-
-      {/* Step 2 */}
-      <StepBlock number="2" title="Escolha a roupa" hint="Envie a foto da peça que deseja experimentar.">
+      {/* Step 1 — Escolha uma roupa */}
+      <StepBlock number="1" title="Escolha uma roupa" hint="Envie a foto da peça ou escolha do catálogo da loja.">
         <ImageUpload
           value={props.garmentImage}
           onChange={(v) => { props.setGarmentImage(v); if (v) props.setGarmentImageUrl(""); }}
-          primaryLabel="Enviar foto da peça"
-          secondaryLabel="Escolher do catálogo da loja"
+          primaryLabel="Enviar foto da roupa"
+          secondaryLabel="Escolher do catálogo"
           secondaryDisabled={!STORE.storeCatalog?.length}
         />
         {props.garmentImageUrl && !props.garmentImage && (
@@ -468,17 +509,37 @@ function TryOn(props: {
             </button>
           </div>
         )}
-        <button
-          onClick={() => setLinkModal(true)}
-          className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Link2 className="h-3 w-3" strokeWidth={1.5} />
-          Adicionar por link (opcional)
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <button
+            onClick={() => setQrModal(true)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <QrCode className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Escanear QR da loja
+          </button>
+          <button
+            onClick={() => setLinkModal(true)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Link2 className="h-3 w-3" strokeWidth={1.5} />
+            Adicionar por link (opcional)
+          </button>
+        </div>
       </StepBlock>
 
-      {/* Step 3 */}
-      <StepBlock number="3" title="Tipo de peça" hint="Escolha o tipo para um resultado mais fiel.">
+      {/* Step 2 — Use sua foto */}
+      <StepBlock number="2" title="Use sua foto" hint="Use uma foto de corpo inteiro, com boa iluminação.">
+        <ImageUpload
+          value={props.modelImage}
+          onChange={props.setModelImage}
+          primaryLabel="Tirar foto"
+          secondaryLabel="Escolher da galeria"
+          captureCamera
+        />
+      </StepBlock>
+
+      {/* Step 3 — Categoria */}
+      <StepBlock number="3" title="Escolha a categoria" hint="Escolha o tipo para um resultado mais fiel.">
         <div className="grid grid-cols-2 gap-2.5">
           {categories.map((c) => {
             const active = props.uiCategory === c.id;
@@ -520,9 +581,12 @@ function TryOn(props: {
         onClick={props.onSubmit}
         className="btn-brand mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 text-sm font-medium active:scale-[0.98] transition-transform"
       >
-        Experimentar roupa
+        Ver como fica
         <ArrowRight className="h-4 w-4" strokeWidth={2} />
       </button>
+
+      {qrModal && <QrModal onClose={() => setQrModal(false)} />}
+
 
       {linkModal && (
         <LinkModal
@@ -716,6 +780,36 @@ function LinkModal({
     </ModalShell>
   );
 }
+
+/* ─────────── QR modal (layout only) ─────────── */
+function QrModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalShell onClose={onClose}>
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
+        <QrCode className="h-5 w-5 text-white/85" strokeWidth={1.5} />
+      </div>
+      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">Escanear QR da loja</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        Aponte a câmera para o QR de uma peça na loja. Ela abre aqui automaticamente — depois é só enviar sua foto.
+      </p>
+      <div className="glass mt-5 flex aspect-square w-full items-center justify-center rounded-3xl">
+        <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02]">
+          <QrCode className="h-10 w-10 text-white/40" strokeWidth={1.25} />
+        </div>
+      </div>
+      <p className="mt-4 text-center text-[11px] text-muted-foreground">
+        Em breve na sua loja parceira.
+      </p>
+      <button
+        onClick={onClose}
+        className="btn-brand mt-5 w-full rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+      >
+        Entendi
+      </button>
+    </ModalShell>
+  );
+}
+
 
 /* ─────────── Pro modal ─────────── */
 function ProModal({ onClose }: { onClose: () => void }) {
