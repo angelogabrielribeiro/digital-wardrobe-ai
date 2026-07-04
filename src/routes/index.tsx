@@ -6,39 +6,58 @@ import {
   Shirt,
   User,
   Upload,
+  Camera,
+  ImagePlus,
   Link2,
   ArrowRight,
   Bookmark,
-  RefreshCw,
   Check,
   X,
   Image as ImageIcon,
   ChevronRight,
   Plus,
-  Store,
-  ShoppingBag,
-  MessageCircle,
-  QrCode,
-  Tag,
   Footprints,
   Watch,
   Sparkles,
+  Lock,
+  Share2,
+  ShoppingBag,
+  HelpCircle,
+  Shield,
+  LogOut,
+  Images,
 } from "lucide-react";
 import { generateTryOnLook } from "@/lib/tryon.functions";
 import beforeImg from "@/assets/before-model.jpg";
 import afterImg from "@/assets/after-model.jpg";
-import phoneMockup from "@/assets/phone-mockup.png";
 
 export const Route = createFileRoute("/")({
   component: AuraFitApp,
 });
 
+/* ─────────── White-label config (placeholder) ─────────── */
+type StoreConfig = {
+  storeName?: string;
+  storeLogo?: string;
+  storePrimaryColor?: string;
+  storeWhatsApp?: string;
+  storeCatalog?: Array<{ id: string; name: string; image: string; buyUrl?: string }>;
+};
+const STORE: StoreConfig = {};
+
 type Screen = "home" | "tryon" | "loading" | "result" | "wardrobe" | "profile";
 type ApiCategory = "tops" | "bottoms";
-type UiCategory = "roupas" | "calcados" | "acessorios";
-type SavedLook = { id: string; url: string; category: UiCategory; createdAt: number };
+type UiCategory = "superior" | "inferior" | "calcados" | "acessorios";
+type SavedLook = {
+  id: string;
+  url: string;
+  category: UiCategory;
+  createdAt: number;
+  buyUrl?: string;
+};
 
 const STORAGE_KEY = "aurafit_looks";
+const PRO_CATS: UiCategory[] = ["calcados", "acessorios"];
 
 function AuraFitApp() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
@@ -46,12 +65,13 @@ function AuraFitApp() {
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [garmentImage, setGarmentImage] = useState<string | null>(null);
   const [garmentImageUrl, setGarmentImageUrl] = useState("");
-  const [uiCategory, setUiCategory] = useState<UiCategory>("roupas");
-  const [apiCategory, setApiCategory] = useState<ApiCategory>("tops");
+  const [garmentBuyUrl, setGarmentBuyUrl] = useState("");
+  const [uiCategory, setUiCategory] = useState<UiCategory>("superior");
 
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [savedLooks, setSavedLooks] = useState<SavedLook[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [proModal, setProModal] = useState(false);
 
   const generateFn = useServerFn(generateTryOnLook);
 
@@ -70,8 +90,13 @@ function AuraFitApp() {
     setErrorMessage(null);
     const model = modelImage;
     const garment = garmentImage || garmentImageUrl.trim();
-    if (!model) return setErrorMessage("Envie uma foto sua.");
-    if (!garment) return setErrorMessage("Envie a peça ou cole a URL.");
+    if (!model) return setErrorMessage("Envie sua foto.");
+    if (!garment) return setErrorMessage("Envie a peça que deseja experimentar.");
+    if (PRO_CATS.includes(uiCategory)) {
+      setProModal(true);
+      return;
+    }
+    const apiCategory: ApiCategory = uiCategory === "inferior" ? "bottoms" : "tops";
 
     setCurrentScreen("loading");
     try {
@@ -79,29 +104,36 @@ function AuraFitApp() {
         data: { model_image: model, garment_image: garment, category: apiCategory },
       });
       setGeneratedImage(res.imageUrl);
+      // auto-save to history
+      const item: SavedLook = {
+        id: crypto.randomUUID(),
+        url: res.imageUrl,
+        category: uiCategory,
+        createdAt: Date.now(),
+        buyUrl: garmentBuyUrl.trim() || undefined,
+      };
+      setSavedLooks((s) => [item, ...s]);
       setCurrentScreen("result");
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : "Não foi possível gerar.");
+      setErrorMessage(e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.");
       setCurrentScreen("tryon");
     }
   }
 
   function openTryOn(cat: UiCategory) {
+    if (PRO_CATS.includes(cat)) {
+      setProModal(true);
+      return;
+    }
     setUiCategory(cat);
-    if (cat === "roupas") setApiCategory("tops");
     setCurrentScreen("tryon");
-  }
-
-  function saveCurrent() {
-    if (!generatedImage) return;
-    const item: SavedLook = { id: crypto.randomUUID(), url: generatedImage, category: uiCategory, createdAt: Date.now() };
-    setSavedLooks((s) => [item, ...s]);
   }
 
   function resetTryOn() {
     setGeneratedImage(null);
     setGarmentImage(null);
     setGarmentImageUrl("");
+    setGarmentBuyUrl("");
     setErrorMessage(null);
     setCurrentScreen("tryon");
   }
@@ -112,7 +144,7 @@ function AuraFitApp() {
       <div className="relative z-[2] mx-auto flex min-h-screen w-full max-w-[440px] flex-col">
         {currentScreen === "home" && (
           <Home
-            onStart={() => openTryOn("roupas")}
+            onStart={() => openTryOn("superior")}
             onCategory={openTryOn}
           />
         )}
@@ -121,15 +153,16 @@ function AuraFitApp() {
             modelImage={modelImage}
             garmentImage={garmentImage}
             garmentImageUrl={garmentImageUrl}
+            garmentBuyUrl={garmentBuyUrl}
             uiCategory={uiCategory}
-            apiCategory={apiCategory}
             errorMessage={errorMessage}
             setModelImage={setModelImage}
             setGarmentImage={setGarmentImage}
             setGarmentImageUrl={setGarmentImageUrl}
+            setGarmentBuyUrl={setGarmentBuyUrl}
             setUiCategory={setUiCategory}
-            setApiCategory={setApiCategory}
             onSubmit={handleGenerate}
+            onPro={() => setProModal(true)}
           />
         )}
         {currentScreen === "loading" && <LoadingScreen />}
@@ -137,18 +170,24 @@ function AuraFitApp() {
           <Result
             image={generatedImage}
             original={modelImage}
-            onSave={saveCurrent}
+            buyUrl={garmentBuyUrl.trim() || undefined}
             onRetry={resetTryOn}
           />
         )}
         {currentScreen === "wardrobe" && (
-          <Wardrobe looks={savedLooks} onDelete={(id) => setSavedLooks((s) => s.filter((l) => l.id !== id))} />
+          <Wardrobe
+            looks={savedLooks}
+            onDelete={(id) => setSavedLooks((s) => s.filter((l) => l.id !== id))}
+            onPro={() => setProModal(true)}
+          />
         )}
         {currentScreen === "profile" && <Profile lookCount={savedLooks.length} />}
 
         {currentScreen !== "loading" && (
           <BottomNav current={currentScreen} onGo={(s) => setCurrentScreen(s)} />
         )}
+
+        {proModal && <ProModal onClose={() => setProModal(false)} />}
       </div>
     </div>
   );
@@ -168,10 +207,10 @@ function Home({
       <header className="fade-up">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[color:var(--border-strong)] bg-white/[0.02] px-3 py-1.5 text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
           <span className="inline-block h-1 w-1 rounded-full bg-brand" />
-          Provador Virtual
+          Provador virtual
         </div>
-        <h1 className="font-display text-[40px] font-semibold leading-[1.02] tracking-[-0.035em]">
-          Veja como<br />a roupa fica<br />antes de comprar.
+        <h1 className="font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
+          Veja como a roupa<br />fica antes de comprar.
         </h1>
         <p className="mt-5 max-w-[300px] text-[15px] leading-relaxed text-muted-foreground">
           Experimente qualquer peça em segundos.
@@ -199,9 +238,9 @@ function Home({
         <SectionLabel>Como funciona</SectionLabel>
         <div className="flex flex-col gap-3">
           {[
-            { n: "01", t: "Envie uma foto." },
-            { n: "02", t: "Escolha uma roupa." },
-            { n: "03", t: "Veja o resultado." },
+            { n: "01", t: "Envie sua foto." },
+            { n: "02", t: "Escolha uma peça." },
+            { n: "03", t: "Veja em você." },
           ].map((s) => (
             <div key={s.n} className="glass flex items-center gap-5 rounded-2xl px-5 py-4">
               <span className="font-display text-lg font-medium text-gradient-violet">{s.n}</span>
@@ -215,62 +254,31 @@ function Home({
       <section className="fade-up" style={{ animationDelay: "160ms" }}>
         <SectionLabel>Categorias</SectionLabel>
         <div className="grid grid-cols-3 gap-3">
-          <CategoryCard icon={<Shirt className="h-5 w-5" strokeWidth={1.5} />} label="Roupas" active onClick={() => onCategory("roupas")} />
-          <CategoryCard icon={<Footprints className="h-5 w-5" strokeWidth={1.5} />} label="Calçados" onClick={() => onCategory("calcados")} soon />
-          <CategoryCard icon={<Watch className="h-5 w-5" strokeWidth={1.5} />} label="Acessórios" onClick={() => onCategory("acessorios")} soon />
-        </div>
-      </section>
-
-      {/* Onde usar */}
-      <section className="fade-up" style={{ animationDelay: "200ms" }}>
-        <SectionLabel>Onde usar</SectionLabel>
-        <div className="glass overflow-hidden rounded-3xl">
-          {[
-            { icon: Store, label: "Lojas físicas" },
-            { icon: ShoppingBag, label: "E-commerce" },
-            { icon: MessageCircle, label: "WhatsApp" },
-            { icon: QrCode, label: "QR Code na vitrine" },
-            { icon: Tag, label: "QR Code na etiqueta" },
-          ].map(({ icon: Icon, label }, i, arr) => (
-            <div
-              key={label}
-              className={`flex items-center gap-4 px-5 py-4 ${i < arr.length - 1 ? "border-b border-[color:var(--border)]" : ""}`}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04]">
-                <Icon className="h-4 w-4 text-white/85" strokeWidth={1.5} />
-              </div>
-              <span className="text-[14px] font-medium text-foreground/95">{label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Phone mockup */}
-      <section className="fade-up" style={{ animationDelay: "240ms" }}>
-        <div className="glass relative overflow-hidden rounded-[28px] px-6 pt-8 pb-0">
-          <div
-            className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-40 blur-3xl"
-            style={{ background: "radial-gradient(circle, rgba(141,103,255,0.35), transparent 70%)" }}
+          <CategoryCard
+            icon={<Shirt className="h-5 w-5" strokeWidth={1.5} />}
+            label="Roupas"
+            status="ativo"
+            onClick={() => onCategory("superior")}
           />
-          <div className="relative">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Em qualquer tela</p>
-            <h3 className="mt-2 font-display text-[22px] font-semibold leading-tight tracking-[-0.02em]">
-              Simples no celular.<br />Poderoso na loja.
-            </h3>
-            <div className="mt-6 flex justify-center">
-              <img
-                src={phoneMockup}
-                alt="Provador virtual em um celular"
-                loading="lazy"
-                className="h-[280px] w-auto object-contain"
-              />
-            </div>
-          </div>
+          <CategoryCard
+            icon={<Footprints className="h-5 w-5" strokeWidth={1.5} />}
+            label="Calçados"
+            status="pro"
+            onClick={() => onCategory("calcados")}
+          />
+          <CategoryCard
+            icon={<Watch className="h-5 w-5" strokeWidth={1.5} />}
+            label="Acessórios"
+            status="pro"
+            onClick={() => onCategory("acessorios")}
+          />
         </div>
       </section>
 
       <footer className="pt-4 text-center">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">AuraFit · White Label</p>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          {STORE.storeName ? STORE.storeName : "Powered by AuraFit"}
+        </p>
       </footer>
     </div>
   );
@@ -288,29 +296,32 @@ function CategoryCard({
   icon,
   label,
   onClick,
-  active,
-  soon,
+  status,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  active?: boolean;
-  soon?: boolean;
+  status: "ativo" | "pro";
 }) {
+  const isPro = status === "pro";
   return (
     <button
       onClick={onClick}
-      className={`glass relative flex flex-col items-start gap-5 rounded-2xl p-4 text-left transition-all active:scale-[0.97] hover:border-white/[0.10] ${active ? "border-[color:var(--brand)]/60" : ""}`}
+      className={`glass relative flex flex-col items-start gap-5 rounded-2xl p-4 text-left transition-all active:scale-[0.97] hover:border-white/[0.10] ${!isPro ? "border-[color:var(--brand)]/40" : ""}`}
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04] text-white/90">
+      <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04] ${isPro ? "text-white/50" : "text-white/90"}`}>
         {icon}
       </div>
-      <span className="text-[13px] font-medium">{label}</span>
-      {soon && (
-        <span className="absolute right-3 top-3 text-[8px] uppercase tracking-[0.2em] text-muted-foreground">
-          em breve
-        </span>
-      )}
+      <span className={`text-[13px] font-medium ${isPro ? "text-white/60" : ""}`}>{label}</span>
+      <span
+        className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] ${
+          isPro
+            ? "border border-[color:var(--brand)]/40 text-[color:var(--brand-2)]"
+            : "text-muted-foreground"
+        }`}
+      >
+        {isPro ? "Pro" : "Ativo"}
+      </span>
     </button>
   );
 }
@@ -349,10 +360,7 @@ function BeforeAfter({ before, after }: { before: string; after: string }) {
         className="absolute inset-0 h-full w-full object-cover"
         draggable={false}
       />
-      <div
-        className="absolute inset-0 overflow-hidden"
-        style={{ width: `${pos}%` }}
-      >
+      <div className="absolute inset-0 overflow-hidden" style={{ width: `${pos}%` }}>
         <img
           src={before}
           alt="Antes"
@@ -363,7 +371,6 @@ function BeforeAfter({ before, after }: { before: string; after: string }) {
         />
       </div>
 
-      {/* Labels */}
       <span className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
         Antes
       </span>
@@ -371,7 +378,6 @@ function BeforeAfter({ before, after }: { before: string; after: string }) {
         Depois
       </span>
 
-      {/* Divider + handle */}
       <div
         className="absolute inset-y-0 w-[2px] bg-white/90 shadow-[0_0_20px_rgba(141,103,255,0.6)]"
         style={{ left: `calc(${pos}% - 1px)` }}
@@ -392,79 +398,117 @@ function TryOn(props: {
   modelImage: string | null;
   garmentImage: string | null;
   garmentImageUrl: string;
+  garmentBuyUrl: string;
   uiCategory: UiCategory;
-  apiCategory: ApiCategory;
   errorMessage: string | null;
   setModelImage: (v: string | null) => void;
   setGarmentImage: (v: string | null) => void;
   setGarmentImageUrl: (v: string) => void;
+  setGarmentBuyUrl: (v: string) => void;
   setUiCategory: (c: UiCategory) => void;
-  setApiCategory: (c: ApiCategory) => void;
   onSubmit: () => void;
+  onPro: () => void;
 }) {
-  const catLabel: Record<UiCategory, string> = {
-    roupas: "Roupas",
-    calcados: "Calçados",
-    acessorios: "Acessórios",
-  };
+  const [linkModal, setLinkModal] = useState(false);
+
+  const categories: Array<{
+    id: UiCategory;
+    label: string;
+    hint: string;
+    pro?: boolean;
+    icon: React.ElementType;
+  }> = [
+    { id: "superior", label: "Superior", hint: "Camisas, camisetas, jaquetas e moletons.", icon: Shirt },
+    { id: "inferior", label: "Inferior", hint: "Calças, shorts e saias.", icon: Shirt },
+    { id: "calcados", label: "Calçados", hint: "Tênis, botas e sapatos.", pro: true, icon: Footprints },
+    { id: "acessorios", label: "Acessórios", hint: "Óculos, bolsas e relógios.", pro: true, icon: Watch },
+  ];
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-6 pt-14 pb-32 fade-in">
+    <div className="flex flex-1 flex-col gap-8 px-6 pt-14 pb-32 fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          {catLabel[props.uiCategory]}
+          Experimentar
         </p>
         <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">
-          Experimente em<br />segundos.
+          Veja em você em<br />segundos.
         </h1>
       </header>
 
-      <ImageUpload
-        label="1. Use sua foto"
-        hint="Corpo inteiro, boa luz."
-        value={props.modelImage}
-        onChange={props.setModelImage}
-      />
-
-      <ImageUpload
-        label="2. Escolha uma peça"
-        hint="Upload ou URL abaixo."
-        value={props.garmentImage}
-        onChange={props.setGarmentImage}
-      />
-
-      <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3.5">
-        <Link2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-        <input
-          type="url"
-          inputMode="url"
-          placeholder="Cole a URL da imagem"
-          value={props.garmentImageUrl}
-          onChange={(e) => props.setGarmentImageUrl(e.target.value)}
-          className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+      {/* Step 1 */}
+      <StepBlock number="1" title="Envie sua foto" hint="Use uma foto de corpo inteiro, com boa luz.">
+        <ImageUpload
+          value={props.modelImage}
+          onChange={props.setModelImage}
+          primaryLabel="Tirar foto"
+          secondaryLabel="Escolher da galeria"
+          captureCamera
         />
-      </div>
+      </StepBlock>
 
-      {props.uiCategory === "roupas" && (
-        <div>
-          <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Parte da roupa</p>
-          <div className="grid grid-cols-2 gap-2.5">
-            {(["tops", "bottoms"] as const).map((c) => (
-              <button
-                key={c}
-                onClick={() => props.setApiCategory(c)}
-                className={`rounded-2xl border px-4 py-3.5 text-sm font-medium transition-all active:scale-[0.98] ${
-                  props.apiCategory === c
-                    ? "border-[color:var(--brand)] bg-white/[0.03] text-white"
-                    : "border-[color:var(--border)] bg-[color:var(--surface)] text-foreground/70 hover:text-foreground"
-                }`}
-              >
-                {c === "tops" ? "Parte de cima" : "Parte de baixo"}
-              </button>
-            ))}
+      {/* Step 2 */}
+      <StepBlock number="2" title="Escolha a roupa" hint="Envie a foto da peça que deseja experimentar.">
+        <ImageUpload
+          value={props.garmentImage}
+          onChange={(v) => { props.setGarmentImage(v); if (v) props.setGarmentImageUrl(""); }}
+          primaryLabel="Enviar foto da peça"
+          secondaryLabel="Escolher do catálogo da loja"
+          secondaryDisabled={!STORE.storeCatalog?.length}
+        />
+        {props.garmentImageUrl && !props.garmentImage && (
+          <div className="glass mt-3 flex items-center gap-3 rounded-2xl px-4 py-3">
+            <Link2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <span className="flex-1 truncate text-xs text-foreground/80">{props.garmentImageUrl}</span>
+            <button
+              onClick={() => props.setGarmentImageUrl("")}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Remover"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
           </div>
+        )}
+        <button
+          onClick={() => setLinkModal(true)}
+          className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Link2 className="h-3 w-3" strokeWidth={1.5} />
+          Adicionar por link (opcional)
+        </button>
+      </StepBlock>
+
+      {/* Step 3 */}
+      <StepBlock number="3" title="Tipo de peça" hint="Escolha o tipo para um resultado mais fiel.">
+        <div className="grid grid-cols-2 gap-2.5">
+          {categories.map((c) => {
+            const active = props.uiCategory === c.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => {
+                  if (c.pro) return props.onPro();
+                  props.setUiCategory(c.id);
+                }}
+                className={`relative flex flex-col items-start gap-2 rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98] ${
+                  active && !c.pro
+                    ? "border-[color:var(--brand)] bg-white/[0.03]"
+                    : "border-[color:var(--border)] bg-[color:var(--surface)]"
+                } ${c.pro ? "opacity-70" : ""}`}
+              >
+                <span className={`text-sm font-medium ${c.pro ? "text-white/70" : "text-white"}`}>
+                  {c.label}
+                </span>
+                <span className="text-[10px] leading-snug text-muted-foreground">{c.hint}</span>
+                {c.pro && (
+                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand)]/40 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-[color:var(--brand-2)]">
+                    <Lock className="h-2.5 w-2.5" strokeWidth={2} /> Pro
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </StepBlock>
 
       {props.errorMessage && (
         <div className="rounded-2xl border border-[color:var(--destructive)]/30 bg-[color:var(--destructive)]/[0.08] px-4 py-3 text-sm text-white/90">
@@ -476,69 +520,239 @@ function TryOn(props: {
         onClick={props.onSubmit}
         className="btn-brand mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 text-sm font-medium active:scale-[0.98] transition-transform"
       >
-        Gerar visual
+        Experimentar roupa
         <ArrowRight className="h-4 w-4" strokeWidth={2} />
       </button>
+
+      {linkModal && (
+        <LinkModal
+          initialImage={props.garmentImageUrl}
+          initialBuy={props.garmentBuyUrl}
+          onClose={() => setLinkModal(false)}
+          onSave={(img, buy) => {
+            props.setGarmentImageUrl(img);
+            props.setGarmentBuyUrl(buy);
+            if (img) props.setGarmentImage(null);
+            setLinkModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StepBlock({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: string;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-4 flex items-baseline gap-3">
+        <span className="font-display text-sm font-medium text-gradient-violet">{number}</span>
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+        </div>
+      </div>
+      {children}
     </div>
   );
 }
 
 function ImageUpload({
-  label,
-  hint,
   value,
   onChange,
+  primaryLabel,
+  secondaryLabel,
+  captureCamera,
+  secondaryDisabled,
 }: {
-  label: string;
-  hint: string;
   value: string | null;
   onChange: (v: string | null) => void;
+  primaryLabel: string;
+  secondaryLabel: string;
+  captureCamera?: boolean;
+  secondaryDisabled?: boolean;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
-  async function onFile(f: File) {
+  function onFile(f: File) {
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(f);
   }
 
-  return (
-    <div>
-      <div className="mb-3 flex items-baseline justify-between">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
+  if (value) {
+    return (
+      <div className="glass relative aspect-[4/5] w-full overflow-hidden rounded-3xl">
+        <img src={value} alt="Foto enviada" className="h-full w-full object-cover" />
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/60 backdrop-blur-md"
+          aria-label="Remover"
+        >
+          <X className="h-4 w-4" strokeWidth={1.5} />
+        </button>
       </div>
-      <div
-        onClick={() => ref.current?.click()}
-        className="glass group relative flex aspect-[4/5] w-full cursor-pointer overflow-hidden rounded-3xl transition-all hover:border-white/[0.10]"
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2.5">
+      <button
+        type="button"
+        onClick={() => (captureCamera ? cameraRef.current?.click() : galleryRef.current?.click())}
+        className="glass flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-6 transition-all active:scale-[0.98] hover:border-white/[0.10]"
       >
-        {value ? (
-          <>
-            <img src={value} alt={label} className="h-full w-full object-cover" />
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onChange(null); }}
-              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-white/10"
-            >
-              <X className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
-              <Upload className="h-4 w-4 text-white/85" strokeWidth={1.5} />
-            </div>
-            <p className="text-sm font-medium">Toque para enviar</p>
-            <p className="text-xs text-muted-foreground">JPG · PNG · até 10 MB</p>
-          </div>
-        )}
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04]">
+          {captureCamera ? (
+            <Camera className="h-4 w-4 text-white/90" strokeWidth={1.5} />
+          ) : (
+            <Upload className="h-4 w-4 text-white/90" strokeWidth={1.5} />
+          )}
+        </div>
+        <span className="text-[12.5px] font-medium">{primaryLabel}</span>
+      </button>
+      <button
+        type="button"
+        disabled={secondaryDisabled}
+        onClick={() => galleryRef.current?.click()}
+        className={`glass flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-6 transition-all active:scale-[0.98] hover:border-white/[0.10] ${secondaryDisabled ? "opacity-40 pointer-events-none" : ""}`}
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04]">
+          <ImagePlus className="h-4 w-4 text-white/90" strokeWidth={1.5} />
+        </div>
+        <span className="text-center text-[12.5px] font-medium leading-tight">{secondaryLabel}</span>
+      </button>
+
+      {captureCamera && (
         <input
-          ref={ref}
+          ref={cameraRef}
           type="file"
           accept="image/*"
+          capture="environment"
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
         />
+      )}
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+      />
+    </div>
+  );
+}
+
+/* ─────────── Link modal ─────────── */
+function LinkModal({
+  initialImage,
+  initialBuy,
+  onClose,
+  onSave,
+}: {
+  initialImage: string;
+  initialBuy: string;
+  onClose: () => void;
+  onSave: (image: string, buy: string) => void;
+}) {
+  const [img, setImg] = useState(initialImage);
+  const [buy, setBuy] = useState(initialBuy);
+  return (
+    <ModalShell onClose={onClose}>
+      <h3 className="font-display text-lg font-semibold tracking-tight">Adicionar por link</h3>
+      <p className="mt-1 text-xs text-muted-foreground">Cole a URL da imagem da peça e, se quiser, o link de compra.</p>
+
+      <div className="mt-5 space-y-3">
+        <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+          <Link2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="URL da imagem da peça"
+            value={img}
+            onChange={(e) => setImg(e.target.value)}
+            className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+          />
+        </div>
+        <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+          <ShoppingBag className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="Link de compra (opcional)"
+            value={buy}
+            onChange={(e) => setBuy(e.target.value)}
+            className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-2.5">
+        <button
+          onClick={onClose}
+          className="glass rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => onSave(img.trim(), buy.trim())}
+          className="btn-brand rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+        >
+          Salvar link
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ─────────── Pro modal ─────────── */
+function ProModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalShell onClose={onClose}>
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
+        <Lock className="h-4 w-4 text-[color:var(--brand-2)]" strokeWidth={2} />
+      </div>
+      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">Disponível no AuraFit Pro.</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        O plano Pro permitirá experimentar calçados, acessórios e outras peças avançadas.
+      </p>
+      <button
+        onClick={onClose}
+        className="btn-brand mt-6 w-full rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+      >
+        Entendi
+      </button>
+    </ModalShell>
+  );
+}
+
+function ModalShell({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-6 pt-16 backdrop-blur-md sm:items-center fade-in" onClick={onClose}>
+      <div
+        className="glass relative w-full max-w-[400px] rounded-[28px] p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+          aria-label="Fechar"
+        >
+          <X className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+        {children}
       </div>
     </div>
   );
@@ -553,7 +767,7 @@ function LoadingScreen() {
         <Sparkles className="h-6 w-6 text-white/70 pulse-soft" strokeWidth={1.5} />
       </div>
       <div className="text-center">
-        <h2 className="font-display text-[22px] font-semibold tracking-tight">Gerando visual</h2>
+        <h2 className="font-display text-[22px] font-semibold tracking-tight">Experimentando</h2>
         <p className="mt-2 text-sm text-muted-foreground">Alguns segundos.</p>
       </div>
     </div>
@@ -564,34 +778,72 @@ function LoadingScreen() {
 function Result({
   image,
   original,
-  onSave,
+  buyUrl,
   onRetry,
 }: {
   image: string;
   original: string | null;
-  onSave: () => void;
+  buyUrl?: string;
   onRetry: () => void;
 }) {
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleShare() {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Veja como ficou", url: image });
+      } else {
+        await navigator.clipboard.writeText(image);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }
+    } catch {}
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-5 px-6 pt-14 pb-32 fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Resultado</p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-tight">Pronto.</h1>
+        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-tight">Veja em você.</h1>
       </header>
 
       {original ? (
         <BeforeAfter before={original} after={image} />
       ) : (
         <div className="glass overflow-hidden rounded-[28px]">
-          <img src={image} alt="Visual gerado" className="h-auto w-full" />
+          <img src={image} alt="Experimentação" className="h-auto w-full" />
         </div>
       )}
 
-      <div className="mt-2 grid grid-cols-2 gap-2.5">
+      <p className="text-center text-[11px] text-muted-foreground">
+        Resultado salvo no seu histórico.
+      </p>
+
+      {/* Buy - primary */}
+      {buyUrl ? (
+        <a
+          href={buyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-brand inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-4 text-sm font-medium active:scale-[0.98]"
+        >
+          <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Comprar peça
+        </a>
+      ) : (
         <button
-          onClick={() => { onSave(); setSaved(true); setTimeout(() => setSaved(false), 1600); }}
-          className="glass inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98] transition-all hover:border-white/[0.10]"
+          disabled
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4 text-sm font-medium text-white/40"
+        >
+          <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Link de compra não disponível
+        </button>
+      )}
+
+      {/* Secondaries */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <button
+          onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 1600); }}
+          className="glass inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98]"
         >
           {saved ? (
             <><Check className="h-4 w-4 text-[color:var(--success)]" strokeWidth={2} /> Salvo</>
@@ -599,38 +851,66 @@ function Result({
             <><Bookmark className="h-4 w-4" strokeWidth={1.5} /> Salvar</>
           )}
         </button>
-        <button onClick={onRetry} className="btn-brand inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98]">
-          <RefreshCw className="h-4 w-4" strokeWidth={1.5} /> Nova peça
+        <button
+          onClick={handleShare}
+          className="glass inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98]"
+        >
+          {copied ? (
+            <><Check className="h-4 w-4 text-[color:var(--success)]" strokeWidth={2} /> Copiado</>
+          ) : (
+            <><Share2 className="h-4 w-4" strokeWidth={1.5} /> Compartilhar</>
+          )}
         </button>
       </div>
+
+      <button
+        onClick={onRetry}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--border-strong)] bg-transparent px-4 py-3.5 text-sm font-medium text-foreground/90 active:scale-[0.98] hover:bg-white/[0.03]"
+      >
+        Experimentar outra roupa
+      </button>
     </div>
   );
 }
 
 /* ─────────── Wardrobe ─────────── */
-function Wardrobe({ looks, onDelete }: { looks: SavedLook[]; onDelete: (id: string) => void }) {
-  const [tab, setTab] = useState<"all" | UiCategory>("all");
-  const filtered = tab === "all" ? looks : looks.filter((l) => l.category === tab);
+function Wardrobe({
+  looks,
+  onDelete,
+  onPro,
+}: {
+  looks: SavedLook[];
+  onDelete: (id: string) => void;
+  onPro: () => void;
+}) {
+  const [tab, setTab] = useState<"all" | "superior" | "inferior" | "pro">("all");
+
+  const filtered =
+    tab === "all"
+      ? looks
+      : tab === "pro"
+        ? looks.filter((l) => PRO_CATS.includes(l.category))
+        : looks.filter((l) => l.category === tab);
 
   const tabs: Array<{ id: typeof tab; label: string }> = [
     { id: "all", label: "Todos" },
-    { id: "roupas", label: "Roupas" },
-    { id: "calcados", label: "Calçados" },
-    { id: "acessorios", label: "Acessórios" },
+    { id: "superior", label: "Superiores" },
+    { id: "inferior", label: "Inferiores" },
+    { id: "pro", label: "Pro" },
   ];
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-6 pt-14 pb-32 fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Salvos</p>
-        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Seus visuais</h1>
+        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Looks salvos</h1>
       </header>
 
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => (t.id === "pro" ? onPro() : setTab(t.id))}
             className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-all ${
               tab === t.id
                 ? "border-[color:var(--brand)] bg-white/[0.03] text-white"
@@ -638,6 +918,9 @@ function Wardrobe({ looks, onDelete }: { looks: SavedLook[]; onDelete: (id: stri
             }`}
           >
             {t.label}
+            {t.id === "pro" && (
+              <Lock className="ml-1 -mt-0.5 inline h-2.5 w-2.5" strokeWidth={2} />
+            )}
           </button>
         ))}
       </div>
@@ -645,15 +928,17 @@ function Wardrobe({ looks, onDelete }: { looks: SavedLook[]; onDelete: (id: stri
       {filtered.length === 0 ? (
         <div className="glass mt-4 flex flex-col items-center gap-3 rounded-3xl px-6 py-16 text-center">
           <ImageIcon className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
-          <p className="text-sm font-medium">Nada salvo por aqui</p>
-          <p className="max-w-[220px] text-xs leading-relaxed text-muted-foreground">Gere um visual e salve para revisitar.</p>
+          <p className="text-sm font-medium">Você ainda não salvou nenhum look.</p>
+          <p className="max-w-[240px] text-xs leading-relaxed text-muted-foreground">
+            Experimente uma peça e salve para comparar depois.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {filtered.map((l) => (
             <div key={l.id} className="glass group relative overflow-hidden rounded-[20px] transition-all hover:border-white/[0.10]">
               <div className="aspect-[3/4] w-full">
-                <img src={l.url} alt="Visual salvo" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+                <img src={l.url} alt="Look salvo" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
               </div>
               <div className="flex items-center justify-between px-3 py-3">
                 <span className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground">{l.category}</span>
@@ -663,7 +948,8 @@ function Wardrobe({ looks, onDelete }: { looks: SavedLook[]; onDelete: (id: stri
               </div>
               <button
                 onClick={() => onDelete(l.id)}
-                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 border border-white/10 opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100"
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-black/60 opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100"
+                aria-label="Remover"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
@@ -677,33 +963,49 @@ function Wardrobe({ looks, onDelete }: { looks: SavedLook[]; onDelete: (id: stri
 
 /* ─────────── Profile ─────────── */
 function Profile({ lookCount }: { lookCount: number }) {
+  const items: Array<{ label: string; icon: React.ElementType }> = [
+    { label: "Meus looks", icon: Bookmark },
+    { label: "Minhas fotos", icon: Images },
+    { label: "Ajuda", icon: HelpCircle },
+    { label: "Privacidade", icon: Shield },
+    { label: "Sair", icon: LogOut },
+  ];
+
   return (
     <div className="flex flex-1 flex-col gap-7 px-6 pt-14 pb-32 fade-in">
       <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Loja</p>
-        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Sua conta</h1>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Conta</p>
+        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Perfil</h1>
       </header>
 
       <div className="glass flex items-center gap-4 rounded-3xl p-5">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04]">
-          <Store className="h-5 w-5 text-white/85" strokeWidth={1.5} />
+          <User className="h-5 w-5 text-white/85" strokeWidth={1.5} />
         </div>
         <div>
-          <p className="text-sm font-medium">Sua loja</p>
-          <p className="mt-1 text-xs text-muted-foreground">{lookCount} visuais salvos</p>
+          <p className="text-sm font-medium">Você</p>
+          <p className="mt-1 text-xs text-muted-foreground">{lookCount} looks salvos</p>
         </div>
       </div>
 
       <div className="glass divide-y divide-[color:var(--border)] rounded-3xl overflow-hidden">
-        {["Personalização da marca", "Integração WhatsApp", "QR Codes", "Central de ajuda"].map((item) => (
-          <button key={item} className="flex w-full items-center justify-between px-5 py-4 text-sm text-foreground/90 hover:bg-white/[0.02] transition-colors">
-            {item}
+        {items.map(({ label, icon: Icon }) => (
+          <button
+            key={label}
+            className="flex w-full items-center justify-between px-5 py-4 text-sm text-foreground/90 hover:bg-white/[0.02] transition-colors"
+          >
+            <span className="inline-flex items-center gap-3">
+              <Icon className="h-4 w-4 text-white/70" strokeWidth={1.5} />
+              {label}
+            </span>
             <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           </button>
         ))}
       </div>
 
-      <p className="text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground">AuraFit · White Label</p>
+      <p className="text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+        Powered by AuraFit
+      </p>
     </div>
   );
 }
@@ -714,14 +1016,14 @@ function BottomNav({ current, onGo }: { current: Screen; onGo: (s: Screen) => vo
     { screen: "home", label: "Início", icon: HomeIcon },
     { screen: "tryon", label: "Experimentar", icon: Plus },
     { screen: "wardrobe", label: "Salvos", icon: Bookmark },
-    { screen: "profile", label: "Loja", icon: User },
+    { screen: "profile", label: "Perfil", icon: User },
   ];
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-[440px] justify-center px-4 pb-4 pt-2"
-      style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-[440px] justify-center px-5 pb-4 pt-2"
+      style={{ paddingBottom: "max(0.9rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="glass flex w-full items-center justify-around rounded-full px-2 py-2.5">
+      <div className="glass flex w-full items-center justify-around rounded-full px-1.5 py-1.5">
         {items.map((it) => {
           const active =
             current === it.screen ||
@@ -731,11 +1033,11 @@ function BottomNav({ current, onGo }: { current: Screen; onGo: (s: Screen) => vo
             <button
               key={it.screen}
               onClick={() => onGo(it.screen)}
-              className={`relative flex flex-1 flex-col items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-medium transition-all ${
+              className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-full px-2 py-1.5 text-[10px] font-medium transition-all ${
                 active ? "text-white" : "text-muted-foreground hover:text-foreground/80"
               }`}
             >
-              <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2 : 1.5} />
+              <Icon className="h-[17px] w-[17px]" strokeWidth={active ? 2 : 1.5} />
               <span className="tracking-wide">{it.label}</span>
               {active && (
                 <span className="absolute -bottom-0.5 h-1 w-1 rounded-full bg-brand" />
