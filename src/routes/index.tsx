@@ -26,10 +26,18 @@ import {
   Shield,
   LogOut,
   Images,
+  QrCode,
 } from "lucide-react";
 import { generateTryOnLook } from "@/lib/tryon.functions";
-import beforeImg from "@/assets/before-model.jpg";
-import afterImg from "@/assets/after-model.jpg";
+import ba1Before from "@/assets/ba-1-before.jpg";
+import ba1After from "@/assets/ba-1-after.jpg";
+import ba2Before from "@/assets/ba-2-before.jpg";
+import ba2After from "@/assets/ba-2-after.jpg";
+
+const BA_PAIRS: Array<{ before: string; after: string; label: string }> = [
+  { before: ba1Before, after: ba1After, label: "Camiseta básica" },
+  { before: ba2Before, after: ba2After, label: "Jaqueta aplicada" },
+];
 
 export const Route = createFileRoute("/")({
   component: AuraFitApp,
