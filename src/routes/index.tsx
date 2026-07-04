@@ -357,18 +357,39 @@ function CategoryCard({
 }
 
 /* ─────────── Before / After slider ─────────── */
-function BeforeAfter({ before, after }: { before: string; after: string }) {
+function BeforeAfter({ before, after, autoAnimate }: { before: string; after: string; autoAnimate?: boolean }) {
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const userInteracted = useRef(false);
+
+  useEffect(() => {
+    if (!autoAnimate) return;
+    // Subtle invitation: nudge divider a few pixels, then settle.
+    const start = performance.now();
+    const duration = 1800;
+    let raf = 0;
+    const tick = (now: number) => {
+      if (userInteracted.current) return;
+      const t = Math.min(1, (now - start) / duration);
+      // Two gentle oscillations then rest at 50.
+      const wobble = Math.sin(t * Math.PI * 2) * 6 * (1 - t);
+      setPos(50 + wobble);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [autoAnimate, before, after]);
 
   function updateFromClientX(clientX: number) {
     const el = ref.current;
     if (!el) return;
+    userInteracted.current = true;
     const rect = el.getBoundingClientRect();
     const p = ((clientX - rect.left) / rect.width) * 100;
     setPos(Math.max(0, Math.min(100, p)));
   }
+
 
   return (
     <div
