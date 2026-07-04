@@ -461,6 +461,7 @@ function TryOn(props: {
   onPro: () => void;
 }) {
   const [linkModal, setLinkModal] = useState(false);
+  const [qrModal, setQrModal] = useState(false);
 
   const categories: Array<{
     id: UiCategory;
@@ -482,28 +483,17 @@ function TryOn(props: {
           Experimentar
         </p>
         <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">
-          Veja em você em<br />segundos.
+          Veja como fica<br />em você.
         </h1>
       </header>
 
-      {/* Step 1 */}
-      <StepBlock number="1" title="Envie sua foto" hint="Use uma foto de corpo inteiro, com boa luz.">
-        <ImageUpload
-          value={props.modelImage}
-          onChange={props.setModelImage}
-          primaryLabel="Tirar foto"
-          secondaryLabel="Escolher da galeria"
-          captureCamera
-        />
-      </StepBlock>
-
-      {/* Step 2 */}
-      <StepBlock number="2" title="Escolha a roupa" hint="Envie a foto da peça que deseja experimentar.">
+      {/* Step 1 — Escolha uma roupa */}
+      <StepBlock number="1" title="Escolha uma roupa" hint="Envie a foto da peça ou escolha do catálogo da loja.">
         <ImageUpload
           value={props.garmentImage}
           onChange={(v) => { props.setGarmentImage(v); if (v) props.setGarmentImageUrl(""); }}
-          primaryLabel="Enviar foto da peça"
-          secondaryLabel="Escolher do catálogo da loja"
+          primaryLabel="Enviar foto da roupa"
+          secondaryLabel="Escolher do catálogo"
           secondaryDisabled={!STORE.storeCatalog?.length}
         />
         {props.garmentImageUrl && !props.garmentImage && (
@@ -519,17 +509,37 @@ function TryOn(props: {
             </button>
           </div>
         )}
-        <button
-          onClick={() => setLinkModal(true)}
-          className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Link2 className="h-3 w-3" strokeWidth={1.5} />
-          Adicionar por link (opcional)
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <button
+            onClick={() => setQrModal(true)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <QrCode className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Escanear QR da loja
+          </button>
+          <button
+            onClick={() => setLinkModal(true)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Link2 className="h-3 w-3" strokeWidth={1.5} />
+            Adicionar por link (opcional)
+          </button>
+        </div>
       </StepBlock>
 
-      {/* Step 3 */}
-      <StepBlock number="3" title="Tipo de peça" hint="Escolha o tipo para um resultado mais fiel.">
+      {/* Step 2 — Use sua foto */}
+      <StepBlock number="2" title="Use sua foto" hint="Use uma foto de corpo inteiro, com boa iluminação.">
+        <ImageUpload
+          value={props.modelImage}
+          onChange={props.setModelImage}
+          primaryLabel="Tirar foto"
+          secondaryLabel="Escolher da galeria"
+          captureCamera
+        />
+      </StepBlock>
+
+      {/* Step 3 — Categoria */}
+      <StepBlock number="3" title="Escolha a categoria" hint="Escolha o tipo para um resultado mais fiel.">
         <div className="grid grid-cols-2 gap-2.5">
           {categories.map((c) => {
             const active = props.uiCategory === c.id;
@@ -571,9 +581,12 @@ function TryOn(props: {
         onClick={props.onSubmit}
         className="btn-brand mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 text-sm font-medium active:scale-[0.98] transition-transform"
       >
-        Experimentar roupa
+        Ver como fica
         <ArrowRight className="h-4 w-4" strokeWidth={2} />
       </button>
+
+      {qrModal && <QrModal onClose={() => setQrModal(false)} />}
+
 
       {linkModal && (
         <LinkModal
