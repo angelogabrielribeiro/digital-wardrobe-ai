@@ -210,32 +210,29 @@ function Home({
   onCategory: (c: UiCategory) => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-16 px-6 pt-14 pb-32 fade-in">
+    <div className="flex flex-1 flex-col gap-14 px-6 pt-14 pb-32 fade-in">
       {/* Hero */}
       <header className="fade-up">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[color:var(--border-strong)] bg-white/[0.02] px-3 py-1.5 text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          <span className="inline-block h-1 w-1 rounded-full bg-brand" />
-          Provador virtual
-        </div>
-        <h1 className="font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
-          Veja como a roupa<br />fica antes de comprar.
-        </h1>
-        <p className="mt-5 max-w-[300px] text-[15px] leading-relaxed text-muted-foreground">
-          Experimente qualquer peça em segundos.
+        <p className="text-[13px] font-medium text-muted-foreground">
+          Veja como fica antes de comprar.
         </p>
+        <h1 className="mt-3 font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
+          Escolha uma roupa.<br />
+          Use sua foto.<br />
+          <span className="text-gradient-violet">Veja como ela fica.</span>
+        </h1>
         <button
           onClick={onStart}
           className="btn-brand mt-8 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-medium active:scale-[0.98] transition-transform"
         >
-          Experimentar agora
+          Ver como fica
           <ArrowRight className="h-4 w-4" strokeWidth={2} />
         </button>
       </header>
 
       {/* Before/After */}
       <section className="fade-up" style={{ animationDelay: "80ms" }}>
-        <SectionLabel>Antes e depois</SectionLabel>
-        <BeforeAfter before={beforeImg} after={afterImg} />
+        <BeforeAfterShowcase />
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Arraste para comparar.
         </p>
@@ -246,9 +243,9 @@ function Home({
         <SectionLabel>Como funciona</SectionLabel>
         <div className="flex flex-col gap-3">
           {[
-            { n: "01", t: "Envie sua foto." },
-            { n: "02", t: "Escolha uma peça." },
-            { n: "03", t: "Veja em você." },
+            { n: "01", t: "Escolha uma roupa." },
+            { n: "02", t: "Use sua foto." },
+            { n: "03", t: "Veja como ela fica." },
           ].map((s) => (
             <div key={s.n} className="glass flex items-center gap-5 rounded-2xl px-5 py-4">
               <span className="font-display text-lg font-medium text-gradient-violet">{s.n}</span>
@@ -288,6 +285,31 @@ function Home({
           {STORE.storeName ? STORE.storeName : "Powered by AuraFit"}
         </p>
       </footer>
+    </div>
+  );
+}
+
+/* ─────────── Before/After showcase (rotates real examples) ─────────── */
+function BeforeAfterShowcase() {
+  const [idx, setIdx] = useState(0);
+  const pair = BA_PAIRS[idx];
+  return (
+    <div>
+      <BeforeAfter before={pair.before} after={pair.after} autoAnimate />
+      {BA_PAIRS.length > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          {BA_PAIRS.map((p, i) => (
+            <button
+              key={p.label}
+              onClick={() => setIdx(i)}
+              aria-label={p.label}
+              className={`h-1.5 rounded-full transition-all ${
+                i === idx ? "w-6 bg-white/90" : "w-1.5 bg-white/25 hover:bg-white/50"
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
