@@ -648,7 +648,19 @@ function ImageUpload({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
+  const [fileError, setFileError] = useState<string | null>(null);
+
   function onFile(f: File) {
+    setFileError(null);
+    if (!f.type.startsWith("image/")) {
+      setFileError("Arquivo inválido. Envie uma imagem.");
+      return;
+    }
+    const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+    if (f.size > MAX_BYTES) {
+      setFileError("Imagem muito grande (máx. 10 MB).");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(f);
