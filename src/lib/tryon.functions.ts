@@ -1,9 +1,43 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+
+const MAX_IMAGE_STRING = 15 * 1024 * 1024; // ~15 MB of base64/URL string
+
+function validateGarment(input: string): void {
+  if (input.length > MAX_IMAGE_STRING) {
+    throw new Error("Imagem da peça muito grande.");
+  }
+  if (input.startsWith("data:")) {
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(input)) {
+      throw new Error("Formato de imagem inválido.");
+    }
+    return;
+  }
+  try {
+    const u = new URL(input);
+    if (u.protocol !== "https:") throw new Error();
+  } catch {
+    throw new Error("Link da peça inválido. Use https.");
+  }
+}
+
+function validateModel(input: string): void {
+  if (input.length > MAX_IMAGE_STRING) {
+    throw new Error("Sua foto está muito grande (máx. ~10 MB).");
+  }
+  if (!input.startsWith("data:image/")) {
+    throw new Error("Foto do modelo inválida.");
+  }
+  if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(input)) {
+    throw new Error("Formato de foto inválido. Use PNG, JPG ou WEBP.");
+  }
+}
 
 /**
  * Server-side proxy to FAL AI FASHN try-on.
  * SECURITY: FAL_KEY stays server-side (never shipped to the browser).
- * In production, keep this call on the backend — do NOT expose the key in VITE_* envs.
+ * Defence-in-depth: same-origin check + strict input size/format limits
+ * to prevent third parties from burning FAL API credits.
  */
 export const generateTryOnLook = createServerFn({ method: "POST" })
   .inputValidator(
@@ -11,10 +45,36 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
       if (!input?.model_image) throw new Error("Envie uma foto do modelo.");
       if (!input?.garment_image) throw new Error("Envie a foto ou URL da peça.");
       if (!["tops", "bottoms"].includes(input.category)) throw new Error("Categoria inválida.");
+      validateModel(input.model_image);
+      validateGarment(input.garment_image);
       return input;
     },
   )
   .handler(async ({ data }) => {
+    // Same-origin check (defence-in-depth against cross-site credit abuse).
+    try {
+      const req = getRequest();
+      const origin = req.headers.get("origin");
+      const referer = req.headers.get("referer");
+      const host = req.headers.get("host");
+      const allowedHost = host?.toLowerCase();
+      const fromAllowed = (value: string | null) => {
+        if (!value) return false;
+        try {
+          return new URL(value).host.toLowerCase() === allowedHost;
+        } catch {
+          return false;
+        }
+      };
+      if (!allowedHost || (!fromAllowed(origin) && !fromAllowed(referer))) {
+        throw new Error("Requisição não autorizada.");
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === "Requisição não autorizada.") throw err;
+      // If getRequest fails for any reason, fail closed.
+      throw new Error("Requisição não autorizada.");
+    }
+
     const key = process.env.FAL_KEY;
     if (!key) throw new Error("FAL_KEY não configurada.");
 
@@ -33,12 +93,11 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
     });
 
     if (!submit.ok) {
-      const t = await submit.text();
-      throw new Error(`Falha ao enviar para a IA: ${t.slice(0, 180)}`);
+      throw new Error("Falha ao enviar para o serviço de try-on.");
     }
     const submitJson = (await submit.json()) as { request_id?: string; status_url?: string; response_url?: string };
     const requestId = submitJson.request_id;
-    if (!requestId) throw new Error("Resposta inválida da IA.");
+    if (!requestId) throw new Error("Resposta inválida do serviço.");
 
     const statusUrl = submitJson.status_url ?? `https://queue.fal.run/fal-ai/fashn/requests/${requestId}/status`;
     const resultUrl = submitJson.response_url ?? `https://queue.fal.run/fal-ai/fashn/requests/${requestId}`;
@@ -51,7 +110,7 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
       if (!s.ok) continue;
       const sJson = (await s.json()) as { status?: string };
       if (sJson.status === "COMPLETED") break;
-      if (sJson.status === "FAILED") throw new Error("A IA não conseguiu gerar o look. Tente outra imagem.");
+      if (sJson.status === "FAILED") throw new Error("Não foi possível gerar o look. Tente outra imagem.");
     }
 
     // 3. Fetch result
@@ -59,6 +118,6 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
     if (!r.ok) throw new Error("Não foi possível recuperar o resultado.");
     const json = (await r.json()) as { images?: Array<{ url: string }> };
     const url = json.images?.[0]?.url;
-    if (!url) throw new Error("Nenhuma imagem retornada pela IA.");
+    if (!url) throw new Error("Nenhuma imagem retornada.");
     return { imageUrl: url };
   });

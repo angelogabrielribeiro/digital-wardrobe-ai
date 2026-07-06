@@ -97,7 +97,17 @@ function AuraFitApp() {
   async function handleGenerate() {
     setErrorMessage(null);
     const model = modelImage;
-    const garment = garmentImage || garmentImageUrl.trim();
+    const trimmedUrl = garmentImageUrl.trim();
+    if (trimmedUrl && !garmentImage) {
+      if (trimmedUrl.length > 2048) return setErrorMessage("Link muito longo.");
+      try {
+        const u = new URL(trimmedUrl);
+        if (u.protocol !== "https:") return setErrorMessage("Use um link https válido.");
+      } catch {
+        return setErrorMessage("Link inválido.");
+      }
+    }
+    const garment = garmentImage || trimmedUrl;
     if (!model) return setErrorMessage("Envie sua foto.");
     if (!garment) return setErrorMessage("Envie a peça que deseja experimentar.");
     if (PRO_CATS.includes(uiCategory)) {
@@ -648,7 +658,19 @@ function ImageUpload({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
+  const [fileError, setFileError] = useState<string | null>(null);
+
   function onFile(f: File) {
+    setFileError(null);
+    if (!f.type.startsWith("image/")) {
+      setFileError("Arquivo inválido. Envie uma imagem.");
+      return;
+    }
+    const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+    if (f.size > MAX_BYTES) {
+      setFileError("Imagem muito grande (máx. 10 MB).");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(f);
@@ -715,6 +737,9 @@ function ImageUpload({
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
       />
+      {fileError && (
+        <p className="col-span-2 text-center text-[11.5px] text-red-400/90">{fileError}</p>
+      )}
     </div>
   );
 }
