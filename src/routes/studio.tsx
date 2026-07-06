@@ -18,7 +18,7 @@ import {
   Printer,
   MessageCircle,
   X,
-  ChevronRight,
+  
   TrendingUp,
   Eye,
   Bookmark,
