@@ -97,7 +97,17 @@ function AuraFitApp() {
   async function handleGenerate() {
     setErrorMessage(null);
     const model = modelImage;
-    const garment = garmentImage || garmentImageUrl.trim();
+    const trimmedUrl = garmentImageUrl.trim();
+    if (trimmedUrl && !garmentImage) {
+      if (trimmedUrl.length > 2048) return setErrorMessage("Link muito longo.");
+      try {
+        const u = new URL(trimmedUrl);
+        if (u.protocol !== "https:") return setErrorMessage("Use um link https válido.");
+      } catch {
+        return setErrorMessage("Link inválido.");
+      }
+    }
+    const garment = garmentImage || trimmedUrl;
     if (!model) return setErrorMessage("Envie sua foto.");
     if (!garment) return setErrorMessage("Envie a peça que deseja experimentar.");
     if (PRO_CATS.includes(uiCategory)) {
