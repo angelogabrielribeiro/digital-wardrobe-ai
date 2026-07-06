@@ -27,6 +27,8 @@ import {
   LogOut,
   Images,
   QrCode,
+  Store,
+
 } from "lucide-react";
 import { generateTryOnLook } from "@/lib/tryon.functions";
 import ba1Before from "@/assets/ba-1-before.jpg";
