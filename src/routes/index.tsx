@@ -727,6 +727,9 @@ function ImageUpload({
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
       />
+      {fileError && (
+        <p className="col-span-2 text-center text-[11.5px] text-red-400/90">{fileError}</p>
+      )}
     </div>
   );
 }
