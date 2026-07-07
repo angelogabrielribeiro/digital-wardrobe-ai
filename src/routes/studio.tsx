@@ -18,12 +18,10 @@ import {
   Printer,
   MessageCircle,
   X,
-  
   TrendingUp,
   Eye,
   Bookmark,
   ShoppingBag,
-  Zap,
   Instagram,
   Globe,
   MapPin,
@@ -32,9 +30,10 @@ import {
   AlertTriangle,
   ImageOff,
   Lock,
+  Pencil,
+  Info,
 } from "lucide-react";
 import {
-  MOCK_PRODUCTS,
   MOCK_IMPORT_ROWS,
   CATEGORY_LABEL,
   CATEGORY_INTEREST,
@@ -42,6 +41,7 @@ import {
   KPIS,
   PRO_CATEGORIES,
   WEEK_INSIGHTS,
+  MOCK_PRODUCTS,
   type StudioProduct,
   type StudioCategory,
   type CatalogRow,
@@ -71,12 +71,17 @@ type Tab = "dashboard" | "produtos" | "qr" | "insights" | "loja";
 /* ─────────────────────────── Root ─────────────────────────── */
 function StudioApp() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [products, setProducts] = useState<StudioProduct[]>(MOCK_PRODUCTS);
+  // Start empty so onboarding shows naturally on first run.
+  const [products, setProducts] = useState<StudioProduct[]>([]);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
+  const [detailProduct, setDetailProduct] = useState<StudioProduct | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [promoteName, setPromoteName] = useState<string | null>(null);
   const [interestedOpen, setInterestedOpen] = useState(false);
+
+  const showOnboarding = !onboardingDone && products.length === 0;
 
   function handleAddProduct(p: Omit<StudioProduct, "id" | "stats" | "status">) {
     const newP: StudioProduct = {
@@ -90,7 +95,8 @@ function StudioApp() {
   }
 
   function handlePublishImport(rows: CatalogRow[]) {
-    const added: StudioProduct[] = rows.map((r) => ({
+    // Enrich with fake baseline stats so insights feel populated.
+    const added: StudioProduct[] = rows.map((r, i) => ({
       id: crypto.randomUUID(),
       name: r.name,
       category: r.category,
@@ -99,7 +105,12 @@ function StudioApp() {
       image: r.image ?? "",
       buyUrl: r.buyUrl,
       status: r.status,
-      stats: { views: 0, tryons: 0, saves: 0, buyClicks: 0 },
+      stats: MOCK_PRODUCTS[i % MOCK_PRODUCTS.length]?.stats ?? {
+        views: 0,
+        tryons: 0,
+        saves: 0,
+        buyClicks: 0,
+      },
     }));
     setProducts((s) => [...added, ...s]);
     setImportOpen(false);
@@ -111,32 +122,59 @@ function StudioApp() {
       <StudioHeader />
 
       <main className="flex-1">
-        {tab === "dashboard" && (
-          <Dashboard
+        {showOnboarding ? (
+          <Onboarding
             onImport={() => setImportOpen(true)}
-            onGoProducts={() => setTab("produtos")}
-            onOpenInterested={() => setInterestedOpen(true)}
+            onFinish={() => setOnboardingDone(true)}
+            hasProducts={products.length > 0}
           />
+        ) : (
+          <>
+            {tab === "dashboard" && (
+              <Dashboard
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onOpenInterested={() => setInterestedOpen(true)}
+              />
+            )}
+            {tab === "produtos" && (
+              <Products
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onAdd={() => setAddOpen(true)}
+                onOpen={(p) => setDetailProduct(p)}
+                onQr={(p) => setQrProduct(p)}
+              />
+            )}
+            {tab === "qr" && <QrCodes products={products} onOpen={(p) => setQrProduct(p)} />}
+            {tab === "insights" && (
+              <Insights
+                products={products}
+                onPromote={(n) => setPromoteName(n)}
+                onOpenInterested={() => setInterestedOpen(true)}
+              />
+            )}
+            {tab === "loja" && <StorePage />}
+          </>
         )}
-        {tab === "produtos" && (
-          <Products
-            products={products}
-            onImport={() => setImportOpen(true)}
-            onAdd={() => setAddOpen(true)}
-            onQr={(p) => setQrProduct(p)}
-          />
-        )}
-        {tab === "qr" && <QrCodes products={products} onOpen={(p) => setQrProduct(p)} />}
-        {tab === "insights" && (
-          <Insights onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
-        )}
-        {tab === "loja" && <StorePage />}
       </main>
 
-      <StudioBottomNav current={tab} onGo={setTab} />
+      {!showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
-      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
+      {importOpen && (
+        <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
+      )}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
+      {detailProduct && (
+        <ProductDetailModal
+          product={detailProduct}
+          onClose={() => setDetailProduct(null)}
+          onQr={() => {
+            setQrProduct(detailProduct);
+            setDetailProduct(null);
+          }}
+        />
+      )}
       {addOpen && <AddProductModal onClose={() => setAddOpen(false)} onSave={handleAddProduct} />}
       {promoteName && <PromoteModal name={promoteName} onClose={() => setPromoteName(null)} />}
       {interestedOpen && <InterestedModal onClose={() => setInterestedOpen(false)} />}
@@ -148,7 +186,10 @@ function StudioApp() {
 function StudioHeader() {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[color:var(--border)] bg-background/80 px-5 py-3.5 backdrop-blur-xl">
-      <Link to="/" className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
+      <Link
+        to="/"
+        className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Modo Cliente
       </Link>
@@ -165,55 +206,195 @@ function StudioHeader() {
   );
 }
 
-/* ─────────────────────────── Dashboard ─────────────────────────── */
-function Dashboard({
+/* ─────────────────────────── Onboarding ─────────────────────────── */
+function Onboarding({
   onImport,
-  onGoProducts,
-  onOpenInterested,
+  onFinish,
+  hasProducts,
 }: {
   onImport: () => void;
-  onGoProducts: () => void;
-  onOpenInterested: () => void;
+  onFinish: () => void;
+  hasProducts: boolean;
 }) {
+  const steps = [
+    {
+      key: "import",
+      title: "Importar catálogo",
+      desc: "Envie sua planilha e o AuraFit organiza tudo.",
+      icon: Upload,
+      cta: "Importar",
+      done: hasProducts,
+      action: onImport,
+    },
+    {
+      key: "qr",
+      title: "Gerar QR Codes",
+      desc: "Cada peça ganha um código para vitrine, cabide ou etiqueta.",
+      icon: QrCode,
+      cta: "Ver QR Codes",
+      done: false,
+      action: onFinish,
+    },
+    {
+      key: "track",
+      title: "Acompanhar resultados",
+      desc: "Veja o que seus clientes experimentam e o que gera mais interesse.",
+      icon: BarChart3,
+      cta: "Ir para o painel",
+      done: false,
+      action: onFinish,
+    },
+  ] as const;
+
   return (
-    <div className="flex flex-col gap-7 px-5 pt-7 fade-in">
+    <div className="flex flex-col gap-8 px-5 pt-10 fade-in">
       <section>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">AuraFit Studio</p>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Bem-vindo
+        </p>
         <h1 className="mt-2 font-display text-[28px] font-semibold leading-tight tracking-[-0.03em]">
-          Faça seus clientes<br />experimentarem antes de comprar.
+          Vamos preparar<br />sua loja.
         </h1>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          ERP controla estoque. <span className="text-foreground">AuraFit faz vender o estoque.</span>
+          Três passos simples para começar a vender com o provador virtual.
         </p>
       </section>
 
-      <section className="grid grid-cols-2 gap-2.5">
-        <Kpi label="Visualizações" value={KPIS.views.toLocaleString("pt-BR")} icon={Eye} />
-        <Kpi label="Looks gerados" value={KPIS.looks.toLocaleString("pt-BR")} icon={Sparkles} />
-        <Kpi label="Produtos experimentados" value={KPIS.triedProducts.toLocaleString("pt-BR")} icon={Package} />
-        <Kpi label="Cliques em comprar" value={KPIS.buyClicks.toLocaleString("pt-BR")} icon={ShoppingBag} />
-        <Kpi
-          label="Vendas estimadas"
-          value={`R$ ${KPIS.estimatedSalesBRL.toLocaleString("pt-BR")}`}
-          icon={TrendingUp}
-          highlight
-          wide
-        />
-        <Kpi label="Taxa de intenção" value={`${KPIS.intentRatePct}%`} icon={Zap} wide />
+      <ol className="flex flex-col gap-3">
+        {steps.map((s, i) => {
+          const Icon = s.icon;
+          const isCurrent =
+            (i === 0 && !hasProducts) || (i === 1 && hasProducts) || (i === 2 && hasProducts);
+          return (
+            <li
+              key={s.key}
+              className={`glass flex items-start gap-3 rounded-3xl p-5 transition-all ${
+                isCurrent ? "border-brand/40 shadow-[0_0_0_1px_rgba(109,94,248,0.25)]" : ""
+              }`}
+            >
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${
+                  s.done
+                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"
+                    : isCurrent
+                      ? "bg-brand/15 text-brand ring-brand/30"
+                      : "bg-white/[0.04] text-white/50 ring-white/10"
+                }`}
+              >
+                {s.done ? (
+                  <Check className="h-4 w-4" strokeWidth={2} />
+                ) : (
+                  <Icon className="h-4 w-4" strokeWidth={1.7} />
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                    Passo {i + 1}
+                  </span>
+                </div>
+                <p className="mt-1 text-[14px] font-medium">{s.title}</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  {s.desc}
+                </p>
+                {isCurrent && (
+                  <button
+                    onClick={s.action}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12px] font-medium text-white transition-transform active:scale-[0.98]"
+                  >
+                    {s.cta}
+                    <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      <button
+        onClick={onFinish}
+        className="mx-auto text-[11.5px] text-muted-foreground hover:text-foreground"
+      >
+        Pular por enquanto
+      </button>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Dashboard ─────────────────────────── */
+function Dashboard({
+  products,
+  onImport,
+  onOpenInterested,
+}: {
+  products: StudioProduct[];
+  onImport: () => void;
+  onOpenInterested: () => void;
+}) {
+  const tried = products.reduce((n, p) => n + p.stats.tryons, 0) || KPIS.triedProducts;
+  const buys = products.reduce((n, p) => n + p.stats.buyClicks, 0) || KPIS.buyClicks;
+  const est = buys > 0
+    ? products.reduce((n, p) => n + p.stats.buyClicks * p.price, 0) || KPIS.estimatedSalesBRL
+    : 0;
+
+  return (
+    <div className="flex flex-col gap-8 px-5 pt-8 fade-in">
+      <section>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Sua loja hoje
+        </p>
+        <h1 className="mt-2 font-display text-[26px] font-semibold leading-tight tracking-[-0.03em]">
+          Painel
+        </h1>
       </section>
 
-      <section className="grid grid-cols-2 gap-2.5">
-        <ActionCard title="Importar catálogo" desc="Envie planilha e publique" onClick={onImport} icon={Upload} />
-        <ActionCard title="Ver produtos" desc={`${KPIS.triedProducts} experimentados`} onClick={onGoProducts} icon={Package} />
+      <section className="flex flex-col gap-2.5">
+        <BigKpi
+          label="Produtos experimentados"
+          value={tried.toLocaleString("pt-BR")}
+          icon={Sparkles}
+        />
+        <div className="grid grid-cols-2 gap-2.5">
+          <SmallKpi
+            label="Cliques em comprar"
+            value={buys.toLocaleString("pt-BR")}
+            icon={ShoppingBag}
+          />
+          <SmallKpi
+            label="Vendas estimadas"
+            value={`R$ ${Math.round(est).toLocaleString("pt-BR")}`}
+            icon={TrendingUp}
+            highlight
+          />
+        </div>
       </section>
+
+      <button
+        onClick={onImport}
+        className="glass flex items-center justify-between rounded-3xl p-4 text-left transition-all active:scale-[0.99] hover:border-white/[0.10]"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 ring-1 ring-brand/20">
+            <Upload className="h-4 w-4 text-brand" strokeWidth={1.7} />
+          </div>
+          <div>
+            <p className="text-[13.5px] font-medium">Importar mais produtos</p>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">Planilha Excel ou CSV</p>
+          </div>
+        </div>
+        <ArrowRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
+      </button>
 
       <section className="glass rounded-3xl p-5">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Clientes interessados</p>
+          <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+            Clientes interessados
+          </p>
           <span className="text-[10px] text-brand">Hoje</span>
         </div>
         <p className="mt-3 text-[15px] leading-snug">
-          <span className="font-semibold">57 pessoas</span> experimentaram uma camiseta hoje.<br />
+          <span className="font-semibold">57 pessoas</span> experimentaram uma peça hoje.<br />
           <span className="text-muted-foreground">19 saíram sem clicar em comprar.</span>
         </p>
         <button
@@ -232,60 +413,48 @@ function Dashboard({
   );
 }
 
-function Kpi({
+function BigKpi({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <div className="glass rounded-3xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">{label}</p>
+        <Icon className="h-3.5 w-3.5 text-brand" strokeWidth={1.7} />
+      </div>
+      <p className="mt-3 font-display text-[34px] font-semibold tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function SmallKpi({
   label,
   value,
   icon: Icon,
   highlight,
-  wide,
 }: {
   label: string;
   value: string;
   icon: React.ElementType;
   highlight?: boolean;
-  wide?: boolean;
 }) {
   return (
-    <div
-      className={`glass relative overflow-hidden rounded-3xl p-4 ${wide ? "col-span-1" : ""} ${
-        highlight ? "bg-gradient-to-br from-[#1a1436] to-[#111217]" : ""
-      }`}
-    >
+    <div className="glass rounded-2xl p-4">
       <div className="flex items-center justify-between">
         <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
-        <Icon className={`h-3.5 w-3.5 ${highlight ? "text-brand" : "text-white/50"}`} strokeWidth={1.7} />
+        <Icon
+          className={`h-3.5 w-3.5 ${highlight ? "text-brand" : "text-white/50"}`}
+          strokeWidth={1.7}
+        />
       </div>
-      <p className={`mt-2.5 font-display text-[22px] font-semibold tracking-tight ${highlight ? "text-white" : ""}`}>
-        {value}
-      </p>
+      <p className="mt-2 font-display text-[20px] font-semibold tracking-tight">{value}</p>
     </div>
-  );
-}
-
-function ActionCard({
-  title,
-  desc,
-  onClick,
-  icon: Icon,
-}: {
-  title: string;
-  desc: string;
-  onClick: () => void;
-  icon: React.ElementType;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="glass group flex flex-col items-start gap-3 rounded-3xl p-4 text-left transition-all active:scale-[0.98] hover:border-white/[0.10]"
-    >
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 ring-1 ring-brand/20">
-        <Icon className="h-4 w-4 text-brand" strokeWidth={1.7} />
-      </div>
-      <div>
-        <p className="text-[13.5px] font-medium">{title}</p>
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground">{desc}</p>
-      </div>
-    </button>
   );
 }
 
@@ -294,11 +463,13 @@ function Products({
   products,
   onImport,
   onAdd,
+  onOpen,
   onQr,
 }: {
   products: StudioProduct[];
   onImport: () => void;
   onAdd: () => void;
+  onOpen: (p: StudioProduct) => void;
   onQr: (p: StudioProduct) => void;
 }) {
   const [cat, setCat] = useState<StudioCategory | "todos">("todos");
@@ -326,12 +497,14 @@ function Products({
       <header className="flex items-end justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Catálogo</p>
-          <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">Produtos</h1>
+          <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
+            Produtos
+          </h1>
         </div>
         <div className="flex gap-2">
           <button
             onClick={onImport}
-            className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] font-medium hover:bg-white/[0.06] transition-colors"
+            className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] font-medium transition-colors hover:bg-white/[0.06]"
           >
             Importar
           </button>
@@ -376,7 +549,7 @@ function Products({
 
       <div className="grid grid-cols-2 gap-2.5">
         {filtered.map((p) => (
-          <ProductCard key={p.id} product={p} onQr={() => onQr(p)} />
+          <ProductCard key={p.id} product={p} onOpen={() => onOpen(p)} onQr={() => onQr(p)} />
         ))}
         {filtered.length === 0 && (
           <p className="col-span-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-xs text-muted-foreground">
@@ -388,34 +561,43 @@ function Products({
   );
 }
 
-function ProductCard({ product, onQr }: { product: StudioProduct; onQr: () => void }) {
+function ProductCard({
+  product,
+  onOpen,
+  onQr,
+}: {
+  product: StudioProduct;
+  onOpen: () => void;
+  onQr: () => void;
+}) {
   return (
     <div className="glass overflow-hidden rounded-2xl">
-      <div className="relative aspect-[4/5] bg-white/[0.03]">
+      <button onClick={onOpen} className="relative block aspect-[4/5] w-full bg-white/[0.03]">
         {product.image ? (
-          <img src={product.image} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
+          <img
+            src={product.image}
+            alt={product.name}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <ImageOff className="h-6 w-6 text-white/30" strokeWidth={1.5} />
           </div>
         )}
         <StatusPill status={product.status} />
-      </div>
-      <div className="flex flex-col gap-2 p-3">
-        <div>
+      </button>
+      <div className="flex items-center justify-between gap-2 p-3">
+        <button onClick={onOpen} className="min-w-0 flex-1 text-left">
           <p className="truncate text-[12.5px] font-medium">{product.name}</p>
-          <p className="mt-0.5 text-[10.5px] text-muted-foreground">{CATEGORY_LABEL[product.category]}</p>
-        </div>
-        <div className="flex items-center justify-between">
-          <p className="text-[12.5px] font-semibold">R$ {product.price.toFixed(2).replace(".", ",")}</p>
-          <button
-            onClick={onQr}
-            className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[10.5px] text-foreground/80 hover:bg-white/[0.06]"
-            aria-label="Gerar QR Code"
-          >
-            <QrCode className="h-3 w-3" strokeWidth={1.7} /> QR
-          </button>
-        </div>
+        </button>
+        <button
+          onClick={onQr}
+          className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[10.5px] text-foreground/80 hover:bg-white/[0.06]"
+          aria-label="Baixar QR Code"
+        >
+          <QrCode className="h-3 w-3" strokeWidth={1.7} /> QR
+        </button>
       </div>
     </div>
   );
@@ -423,9 +605,21 @@ function ProductCard({ product, onQr }: { product: StudioProduct; onQr: () => vo
 
 function StatusPill({ status }: { status: StudioProduct["status"] }) {
   const map = {
-    pronto: { label: "Pronto", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30", Icon: Check },
-    revisar: { label: "Revisar", cls: "bg-amber-500/15 text-amber-300 ring-amber-400/30", Icon: AlertTriangle },
-    "sem-imagem": { label: "Sem imagem", cls: "bg-red-500/15 text-red-300 ring-red-400/30", Icon: ImageOff },
+    pronto: {
+      label: "Pronto",
+      cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+      Icon: Check,
+    },
+    revisar: {
+      label: "Revisar",
+      cls: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+      Icon: AlertTriangle,
+    },
+    "sem-imagem": {
+      label: "Sem imagem",
+      cls: "bg-red-500/15 text-red-300 ring-red-400/30",
+      Icon: ImageOff,
+    },
   } as const;
   const { label, cls, Icon } = map[status];
   return (
@@ -438,55 +632,175 @@ function StatusPill({ status }: { status: StudioProduct["status"] }) {
   );
 }
 
+/* ─────────────────────────── Product detail modal ─────────────────────────── */
+function ProductDetailModal({
+  product,
+  onClose,
+  onQr,
+}: {
+  product: StudioProduct;
+  onClose: () => void;
+  onQr: () => void;
+}) {
+  return (
+    <Modal onClose={onClose} title={product.name}>
+      <div className="flex flex-col gap-4">
+        <div className="glass overflow-hidden rounded-2xl">
+          <div className="relative aspect-[4/3] bg-white/[0.03]">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={product.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <ImageOff className="h-8 w-8 text-white/30" strokeWidth={1.4} />
+              </div>
+            )}
+            <StatusPill status={product.status} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="glass rounded-2xl p-3.5">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Preço</p>
+            <p className="mt-1.5 text-[15px] font-semibold">
+              R$ {product.price.toFixed(2).replace(".", ",")}
+            </p>
+          </div>
+          <div className="glass rounded-2xl p-3.5">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Categoria
+            </p>
+            <p className="mt-1.5 text-[13px] font-medium">{CATEGORY_LABEL[product.category]}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onQr}
+            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white transition-transform active:scale-[0.98]"
+          >
+            <QrCode className="h-3.5 w-3.5" strokeWidth={1.8} /> QR Code
+          </button>
+          <button
+            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
+          >
+            <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} /> Editar
+          </button>
+        </div>
+
+        <div className="glass rounded-2xl p-4">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Informações
+            </p>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
+            <dt className="text-muted-foreground">SKU</dt>
+            <dd className="text-right">{product.sku ?? "—"}</dd>
+            <dt className="text-muted-foreground">Link de compra</dt>
+            <dd className="truncate text-right">
+              {product.buyUrl ? (
+                <a
+                  href={product.buyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand hover:underline"
+                >
+                  Abrir
+                </a>
+              ) : (
+                "—"
+              )}
+            </dd>
+            <dt className="text-muted-foreground">Experimentos</dt>
+            <dd className="text-right tabular-nums">{product.stats.tryons}</dd>
+            <dt className="text-muted-foreground">Cliques em comprar</dt>
+            <dd className="text-right tabular-nums">{product.stats.buyClicks}</dd>
+          </dl>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ─────────────────────────── QR Codes ─────────────────────────── */
-function QrCodes({ products, onOpen }: { products: StudioProduct[]; onOpen: (p: StudioProduct) => void }) {
+function QrCodes({
+  products,
+  onOpen,
+}: {
+  products: StudioProduct[];
+  onOpen: (p: StudioProduct) => void;
+}) {
   return (
     <div className="flex flex-col gap-5 px-5 pt-7 fade-in">
       <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Provador na loja</p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">QR Codes</h1>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Provador na loja
+        </p>
+        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
+          QR Codes
+        </h1>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          Use QR Codes na vitrine, etiqueta, cabide ou balcão. O cliente escaneia e experimenta a peça na hora.
+          Use na vitrine, etiqueta, cabide ou balcão. O cliente escaneia e experimenta a peça na
+          hora.
         </p>
       </header>
 
       <div className="glass rounded-3xl p-4">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Exemplo de etiqueta</p>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Exemplo de etiqueta
+        </p>
         <div className="mt-3 flex items-center gap-4 rounded-2xl bg-white p-4 text-black">
           <FakeQr seed="demo" size={72} />
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-wider">AuraFit</p>
             <p className="mt-1 text-[13.5px] font-medium leading-tight">
-              Escaneie e veja<br />como fica em você.
+              Escaneie e veja
+              <br />
+              como fica em você.
             </p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
+        {products.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-xs text-muted-foreground">
+            Importe seu catálogo para gerar QR Codes.
+          </p>
+        )}
         {products.map((p) => (
           <button
             key={p.id}
             onClick={() => onOpen(p)}
-            className="glass flex items-center gap-3 rounded-2xl p-3 text-left transition-all active:scale-[0.99] hover:border-white/[0.10]"
+            className="glass flex items-center gap-3 rounded-2xl p-3 text-left transition-all hover:border-white/[0.10] active:scale-[0.99]"
           >
             <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
               {p.image ? (
-                <img src={p.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                <img
+                  src={p.image}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
                   <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
                 </div>
               )}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium">{p.name}</p>
               <p className="text-[10.5px] text-muted-foreground">
-                {CATEGORY_LABEL[p.category]} · R$ {p.price.toFixed(2).replace(".", ",")}
+                {CATEGORY_LABEL[p.category]}
               </p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-[10.5px] font-medium text-brand">
-              <QrCode className="h-3 w-3" strokeWidth={1.8} /> Gerar QR
+              <Download className="h-3 w-3" strokeWidth={1.8} /> Baixar QR
             </span>
           </button>
         ))}
@@ -496,7 +810,6 @@ function QrCodes({ products, onOpen }: { products: StudioProduct[]; onOpen: (p: 
 }
 
 function FakeQr({ seed, size = 160 }: { seed: string; size?: number }) {
-  // Deterministic pseudo-QR pattern purely for visual demo.
   const cells = 21;
   const grid = useMemo(() => {
     let h = 0;
@@ -507,24 +820,53 @@ function FakeQr({ seed, size = 160 }: { seed: string; size?: number }) {
   const cell = size / cells;
   const isFinder = (r: number, c: number) => {
     const inBox = (br: number, bc: number) =>
-      r >= br && r < br + 7 && c >= bc && c < bc + 7 &&
-      !(r > br && r < br + 6 && c > bc && c < bc + 6 && (r === br + 1 || r === br + 5 || c === bc + 1 || c === bc + 5));
+      r >= br &&
+      r < br + 7 &&
+      c >= bc &&
+      c < bc + 7 &&
+      !(
+        r > br &&
+        r < br + 6 &&
+        c > bc &&
+        c < bc + 6 &&
+        (r === br + 1 || r === br + 5 || c === bc + 1 || c === bc + 5)
+      );
     return inBox(0, 0) || inBox(0, cells - 7) || inBox(cells - 7, 0);
   };
   const inFinderBox = (r: number, c: number) =>
     (r < 7 && c < 7) || (r < 7 && c >= cells - 7) || (r >= cells - 7 && c < 7);
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rounded-md" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="rounded-md"
+      aria-hidden
+    >
       <rect width={size} height={size} fill="#fff" />
       {Array.from({ length: cells }).map((_, r) =>
         Array.from({ length: cells }).map((_, c) => {
           if (inFinderBox(r, c)) {
             return isFinder(r, c) ? (
-              <rect key={`${r}-${c}`} x={c * cell} y={r * cell} width={cell} height={cell} fill="#000" />
+              <rect
+                key={`${r}-${c}`}
+                x={c * cell}
+                y={r * cell}
+                width={cell}
+                height={cell}
+                fill="#000"
+              />
             ) : null;
           }
           return grid[r * cells + c] ? (
-            <rect key={`${r}-${c}`} x={c * cell} y={r * cell} width={cell} height={cell} fill="#000" />
+            <rect
+              key={`${r}-${c}`}
+              x={c * cell}
+              y={r * cell}
+              width={cell}
+              height={cell}
+              fill="#000"
+            />
           ) : null;
         }),
       )}
@@ -534,71 +876,63 @@ function FakeQr({ seed, size = 160 }: { seed: string; size?: number }) {
 
 /* ─────────────────────────── Insights ─────────────────────────── */
 function Insights({
+  products,
   onPromote,
   onOpenInterested,
 }: {
+  products: StudioProduct[];
   onPromote: (name: string) => void;
   onOpenInterested: () => void;
 }) {
+  const topThree = (products.length > 0 ? products : MOCK_PRODUCTS).slice(0, 3);
+
   return (
-    <div className="flex flex-col gap-6 px-5 pt-7 fade-in">
+    <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
       <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Resumo da semana</p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">Insights</h1>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Últimos 7 dias
+        </p>
+        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
+          Insights
+        </h1>
       </header>
 
-      {/* Week resume */}
-      <section className="grid grid-cols-2 gap-2.5">
-        <MiniInsight
-          label="Mais experimentado"
-          value={WEEK_INSIGHTS.topProduct.name}
-          tag={`+${WEEK_INSIGHTS.topProduct.growthPct}%`}
-          tone="up"
-        />
-        <MiniInsight
-          label="Categoria em alta"
-          value={WEEK_INSIGHTS.hotCategory.name}
-          tag={`${WEEK_INSIGHTS.hotCategory.sharePct}%`}
-        />
-        <MiniInsight
-          label="Produto esquecido"
-          value={WEEK_INSIGHTS.forgotten.name}
-          tag={`${WEEK_INSIGHTS.forgotten.tests} testes`}
-          tone="down"
-        />
-        <div className="glass col-span-1 flex flex-col justify-between rounded-2xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
+      {/* 1. Week resume */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle overline="Resumo" title="Resumo semanal" />
+        <div className="grid grid-cols-2 gap-2.5">
+          <MiniInsight
+            label="Mais experimentado"
+            value={WEEK_INSIGHTS.topProduct.name}
+            tag={`+${WEEK_INSIGHTS.topProduct.growthPct}%`}
+            tone="up"
+          />
+          <MiniInsight
+            label="Categoria em alta"
+            value={WEEK_INSIGHTS.hotCategory.name}
+            tag={`${WEEK_INSIGHTS.hotCategory.sharePct}%`}
+          />
+        </div>
+        <div className="glass rounded-2xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
           <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Recomendação</p>
-          <p className="mt-2 text-[12px] leading-snug text-white/90">{WEEK_INSIGHTS.recommendation}</p>
+          <p className="mt-2 text-[12.5px] leading-snug text-white/90">
+            {WEEK_INSIGHTS.recommendation}
+          </p>
         </div>
       </section>
 
-      <div className="flex gap-2">
-        <button className="flex-1 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12.5px] font-medium hover:bg-white/[0.06]">
-          Copiar resumo
-        </button>
-        <button className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12.5px] font-medium text-white active:scale-[0.98] transition-transform">
-          <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.8} /> Enviar no WhatsApp
-        </button>
-      </div>
-
-      {/* Product funnel */}
+      {/* 2. Product funnel */}
       <section className="flex flex-col gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Desempenho</p>
-          <h2 className="mt-1 text-[16px] font-medium tracking-tight">Funil dos produtos</h2>
-        </div>
-        {MOCK_PRODUCTS.slice(0, 3).map((p) => (
+        <SectionTitle overline="Desempenho" title="Funil dos produtos" />
+        {topThree.map((p) => (
           <ProductFunnel key={p.id} product={p} />
         ))}
       </section>
 
-      {/* Category interest */}
-      <section className="glass rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Interesse por categoria</p>
-        <p className="mt-2 text-[12.5px] text-muted-foreground">
-          Veja quais categorias seus clientes mais experimentam.
-        </p>
-        <div className="mt-4 flex flex-col gap-3">
+      {/* 3. Category interest */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle overline="Interesse" title="Categorias mais experimentadas" />
+        <div className="glass flex flex-col gap-3 rounded-3xl p-5">
           {CATEGORY_INTEREST.map((c) => (
             <div key={c.label}>
               <div className="mb-1 flex items-center justify-between text-[12px]">
@@ -616,15 +950,19 @@ function Insights({
         </div>
       </section>
 
-      {/* Forgotten products */}
-      <section>
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Produtos esquecidos</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">Pouca ou nenhuma experimentação.</p>
-        </div>
+      {/* 4. Forgotten */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle
+          overline="Atenção"
+          title="Produtos esquecidos"
+          desc="Pouca ou nenhuma experimentação."
+        />
         <div className="flex flex-col gap-2">
           {FORGOTTEN.map((f) => (
-            <div key={f.name} className="glass flex items-center justify-between rounded-2xl p-4">
+            <div
+              key={f.name}
+              className="glass flex items-center justify-between rounded-2xl p-4"
+            >
               <div>
                 <p className="text-[13px] font-medium">{f.name}</p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -642,21 +980,43 @@ function Insights({
         </div>
       </section>
 
-      {/* Interested customers */}
-      <section className="glass rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Clientes interessados</p>
-        <p className="mt-3 text-[14px] leading-snug">
-          <span className="font-semibold">57 pessoas</span> experimentaram esta camiseta hoje.
-        </p>
-        <p className="text-[12.5px] text-muted-foreground">19 saíram sem clicar em comprar.</p>
-        <button
-          onClick={onOpenInterested}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
-        >
-          Criar mensagem de retorno
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
+      {/* 5. Interested customers + 6. return message */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle overline="Retorno" title="Clientes interessados" />
+        <div className="glass rounded-3xl p-5">
+          <p className="text-[14px] leading-snug">
+            <span className="font-semibold">57 pessoas</span> experimentaram esta semana.
+          </p>
+          <p className="text-[12.5px] text-muted-foreground">
+            19 saíram sem clicar em comprar.
+          </p>
+          <button
+            onClick={onOpenInterested}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
+          >
+            Criar mensagem de retorno
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+        </div>
       </section>
+    </div>
+  );
+}
+
+function SectionTitle({
+  overline,
+  title,
+  desc,
+}: {
+  overline: string;
+  title: string;
+  desc?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">{overline}</p>
+      <h2 className="mt-1 text-[16px] font-medium tracking-tight">{title}</h2>
+      {desc && <p className="mt-1 text-[12px] text-muted-foreground">{desc}</p>}
     </div>
   );
 }
@@ -682,7 +1042,11 @@ function MiniInsight({
     <div className="glass rounded-2xl p-4">
       <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-[14px] font-medium leading-tight">{value}</p>
-      <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10.5px] font-medium ${tagCls}`}>{tag}</span>
+      <span
+        className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10.5px] font-medium ${tagCls}`}
+      >
+        {tag}
+      </span>
     </div>
   );
 }
@@ -699,9 +1063,20 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
     <div className="glass rounded-2xl p-4">
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
-          <img src={product.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+          {product.image ? (
+            <img
+              src={product.image}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
+            </div>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium">{product.name}</p>
           <p className="text-[10.5px] text-muted-foreground">{CATEGORY_LABEL[product.category]}</p>
         </div>
@@ -718,7 +1093,9 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
                 />
               </div>
               <p className="text-[11px] font-medium tabular-nums">{s.value}</p>
-              <p className="text-center text-[9px] leading-tight text-muted-foreground">{s.label}</p>
+              <p className="text-center text-[9px] leading-tight text-muted-foreground">
+                {s.label}
+              </p>
             </div>
           );
         })}
@@ -737,40 +1114,40 @@ function StorePage() {
   const [addr, setAddr] = useState("");
 
   return (
-    <div className="flex flex-col gap-6 px-5 pt-7 fade-in">
+    <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
       <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Personalização</p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">Minha loja</h1>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Personalização
+        </p>
+        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
+          Minha loja
+        </h1>
       </header>
 
-      {/* Preview */}
-      <div className="glass overflow-hidden rounded-3xl">
-        <div
-          className="flex items-center gap-3 px-5 py-4"
-          style={{ background: `linear-gradient(135deg, ${color}22, transparent)` }}
-        >
+      {/* Block: Sua marca */}
+      <Block overline="Bloco 1" title="Sua marca">
+        <div className="glass overflow-hidden rounded-3xl">
           <div
-            className="flex h-10 w-10 items-center justify-center rounded-2xl text-white text-sm font-semibold"
-            style={{ backgroundColor: color }}
+            className="flex items-center gap-3 px-5 py-4"
+            style={{ background: `linear-gradient(135deg, ${color}22, transparent)` }}
           >
-            {name.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <p className="text-[13.5px] font-semibold">{name || "Minha Loja"}</p>
-            <p className="text-[10.5px] text-muted-foreground">Provador virtual</p>
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold text-white"
+              style={{ backgroundColor: color }}
+            >
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-[13.5px] font-semibold">{name || "Minha Loja"}</p>
+              <p className="text-[10.5px] text-muted-foreground">Provador virtual</p>
+            </div>
           </div>
         </div>
-        <div className="border-t border-[color:var(--border)] px-5 py-3">
-          <p className="text-[10.5px] text-muted-foreground">
-            No plano White Label, a experiência aparece com a marca da sua loja.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
         <Field label="Nome da loja" value={name} onChange={setName} />
         <div className="glass rounded-2xl p-4">
-          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">Cor principal</label>
+          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+            Cor principal
+          </label>
           <div className="mt-2.5 flex items-center gap-3">
             <input
               type="color"
@@ -786,39 +1163,91 @@ function StorePage() {
             />
           </div>
         </div>
-        <Field label="WhatsApp" value={wa} onChange={setWa} placeholder="(11) 99999-9999" Icon={Phone} />
-        <Field label="Instagram" value={ig} onChange={setIg} placeholder="@sualoja" Icon={Instagram} />
-        <Field label="Link do site" value={site} onChange={setSite} placeholder="https://" Icon={Globe} />
-        <Field label="Endereço físico" value={addr} onChange={setAddr} placeholder="Rua, número, cidade" Icon={MapPin} />
-      </div>
+      </Block>
 
-      {/* White label plans */}
-      <section className="glass rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">White Label</p>
-        <p className="mt-2 text-[12.5px] text-muted-foreground">
-          White Label significa que o cliente vê a marca da sua loja, não a marca AuraFit.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-2.5">
+      {/* Block: Contato */}
+      <Block overline="Bloco 2" title="Contato">
+        <Field
+          label="WhatsApp"
+          value={wa}
+          onChange={setWa}
+          placeholder="(11) 99999-9999"
+          Icon={Phone}
+        />
+        <Field
+          label="Instagram"
+          value={ig}
+          onChange={setIg}
+          placeholder="@sualoja"
+          Icon={Instagram}
+        />
+        <Field
+          label="Link do site"
+          value={site}
+          onChange={setSite}
+          placeholder="https://"
+          Icon={Globe}
+        />
+      </Block>
+
+      {/* Block: Endereço */}
+      <Block overline="Bloco 3" title="Endereço">
+        <Field
+          label="Endereço físico"
+          value={addr}
+          onChange={setAddr}
+          placeholder="Rua, número, cidade"
+          Icon={MapPin}
+        />
+      </Block>
+
+      {/* Block: Plano */}
+      <Block overline="Bloco 4" title="Plano">
+        <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">Plano básico</p>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+              Atual
+            </p>
             <p className="mt-2 text-[13px] font-medium">Powered by AuraFit</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Marca AuraFit visível</p>
           </div>
           <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">White Label</p>
-            <ul className="mt-2 space-y-1 text-[12px] text-white/90">
-              <li>Marca e logo da loja</li>
-              <li>Cores da loja</li>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">
+              White Label
+            </p>
+            <ul className="mt-2 space-y-1 text-[11.5px] text-white/90">
+              <li>Sua marca e logo</li>
+              <li>Suas cores</li>
               <li>Link personalizado</li>
-              <li>QR Codes com sua marca</li>
             </ul>
           </div>
         </div>
-      </section>
+      </Block>
 
-      <button className="rounded-full bg-brand py-3 text-[13px] font-medium text-white active:scale-[0.99] transition-transform">
+      <button className="rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99]">
         Salvar alterações
       </button>
     </div>
+  );
+}
+
+function Block({
+  overline,
+  title,
+  children,
+}: {
+  overline: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">{overline}</p>
+        <h2 className="mt-1 text-[16px] font-medium tracking-tight">{title}</h2>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -837,7 +1266,9 @@ function Field({
 }) {
   return (
     <div className="glass rounded-2xl p-4">
-      <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">{label}</label>
+      <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </label>
       <div className="mt-2 flex items-center gap-2">
         {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />}
         <input
@@ -854,7 +1285,7 @@ function Field({
 /* ─────────────────────────── Bottom nav ─────────────────────────── */
 function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => void }) {
   const items: Array<{ tab: Tab; label: string; icon: React.ElementType }> = [
-    { tab: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { tab: "dashboard", label: "Painel", icon: LayoutDashboard },
     { tab: "produtos", label: "Produtos", icon: Package },
     { tab: "qr", label: "QR Codes", icon: QrCode },
     { tab: "insights", label: "Insights", icon: BarChart3 },
@@ -889,7 +1320,7 @@ function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => vo
 }
 
 /* ─────────────────────────── Import modal ─────────────────────────── */
-type ImportStep = "upload" | "analyzing" | "organize" | "review";
+type ImportStep = "upload" | "analyzing" | "issues" | "review";
 function ImportModal({
   onClose,
   onPublish,
@@ -900,10 +1331,18 @@ function ImportModal({
   const [step, setStep] = useState<ImportStep>("upload");
   const [progress, setProgress] = useState(0);
   const [rows, setRows] = useState<CatalogRow[]>(MOCK_IMPORT_ROWS);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function beginAnalysis(name: string) {
-    void name;
+  // Issue summary detected from mock rows
+  const issues = useMemo(() => {
+    const noImage = rows.filter((r) => r.status === "sem-imagem").length;
+    const badPrice = rows.filter((r) => !(r.price > 0)).length;
+    const unknownCat = 0; // mock rows have valid categories
+    return { noImage, badPrice, unknownCat };
+  }, [rows]);
+
+  function beginAnalysis(_name: string) {
     setStep("analyzing");
     setProgress(0);
     const stages = [
@@ -914,7 +1353,10 @@ function ImportModal({
     let i = 0;
     const next = () => {
       if (i >= stages.length) {
-        setStep("organize");
+        // If there are issues, show summary. Otherwise go straight to review.
+        const hasIssues =
+          rows.some((r) => r.status !== "pronto") || rows.some((r) => !(r.price > 0));
+        setStep(hasIssues ? "issues" : "review");
         return;
       }
       setProgress(i);
@@ -931,22 +1373,39 @@ function ImportModal({
       {step === "upload" && (
         <div className="flex flex-col gap-4">
           <p className="text-[13px] text-muted-foreground">
-            Envie sua planilha e o AuraFit organiza os produtos para você.
+            Arraste uma planilha ou selecione um arquivo. O AuraFit analisa automaticamente.
           </p>
           <button
             onClick={() => fileRef.current?.click()}
-            className="glass flex flex-col items-center justify-center gap-3 rounded-3xl border-dashed py-10 transition-colors hover:border-white/[0.14]"
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) beginAnalysis(f.name);
+            }}
+            className={`glass flex flex-col items-center justify-center gap-3 rounded-3xl border-dashed py-12 transition-all ${
+              dragOver ? "border-brand/60 bg-brand/[0.06]" : "hover:border-white/[0.14]"
+            }`}
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
-              <Upload className="h-4 w-4 text-brand" strokeWidth={1.7} />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
+              <Upload className="h-5 w-5 text-brand" strokeWidth={1.7} />
             </div>
             <div className="text-center">
-              <p className="text-[13.5px] font-medium">Arraste sua planilha aqui</p>
-              <p className="mt-0.5 text-[11.5px] text-muted-foreground">ou clique para enviar</p>
+              <p className="text-[14px] font-medium">Arraste uma planilha</p>
+              <p className="mt-1 text-[11.5px] text-muted-foreground">ou selecionar arquivo</p>
             </div>
             <div className="flex gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">.xlsx</span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">.csv</span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
+                Excel
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
+                CSV
+              </span>
             </div>
           </button>
           <input
@@ -959,38 +1418,25 @@ function ImportModal({
               if (f) beginAnalysis(f.name);
             }}
           />
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => beginAnalysis("planilha.xlsx")}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11.5px] font-medium hover:bg-white/[0.06]"
-            >
-              <FileSpreadsheet className="mr-1 inline h-3.5 w-3.5" strokeWidth={1.6} /> Excel
-            </button>
-            <button
-              onClick={() => beginAnalysis("catalogo.csv")}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11.5px] font-medium hover:bg-white/[0.06]"
-            >
-              CSV
-            </button>
-          </div>
           <button
-            onClick={() => setStep("organize")}
-            className="text-center text-[11.5px] text-muted-foreground hover:text-foreground"
+            onClick={() => beginAnalysis("exemplo.xlsx")}
+            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
           >
-            Importar manualmente
+            <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={1.7} /> Usar planilha de exemplo
           </button>
         </div>
       )}
 
       {step === "analyzing" && (
-        <div className="flex flex-col items-center gap-4 py-6">
+        <div className="flex flex-col items-center gap-4 py-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
             <Sparkles className="h-5 w-5 animate-pulse text-brand" strokeWidth={1.7} />
           </div>
           <div className="text-center">
             <p className="text-[14px] font-medium">
-              {["Analisando planilha…", "Identificando produtos…", "Organizando catálogo…"][progress] ??
-                "Organizando catálogo…"}
+              {["Analisando planilha…", "Identificando produtos…", "Organizando catálogo…"][
+                progress
+              ] ?? "Organizando catálogo…"}
             </p>
             <p className="mt-1 text-[11.5px] text-muted-foreground">Isso leva alguns segundos.</p>
           </div>
@@ -1003,40 +1449,48 @@ function ImportModal({
         </div>
       )}
 
-      {step === "organize" && (
-        <div className="flex flex-col gap-3">
-          <p className="text-[13px] text-muted-foreground">Como deseja organizar?</p>
-          <button
-            onClick={() => setStep("review")}
-            className="glass flex items-start gap-3 rounded-2xl p-4 text-left transition-all active:scale-[0.99] hover:border-white/[0.10]"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-              <Sparkles className="h-4 w-4 text-brand" strokeWidth={1.7} />
-            </div>
-            <div>
-              <p className="text-[13px] font-medium">Organizar automaticamente</p>
-              <p className="mt-1 text-[11.5px] text-muted-foreground">
-                O AuraFit tenta identificar nomes, categorias, imagens e preços.
-              </p>
-            </div>
-          </button>
-          <button
-            onClick={() => setStep("review")}
-            className="glass flex items-start gap-3 rounded-2xl p-4 text-left transition-all active:scale-[0.99] hover:border-white/[0.10]"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.05]">
-              <Check className="h-4 w-4 text-foreground/85" strokeWidth={1.7} />
-            </div>
-            <div>
-              <p className="text-[13px] font-medium">Revisar manualmente</p>
-              <p className="mt-1 text-[11.5px] text-muted-foreground">
-                Você confere e ajusta tudo antes de publicar.
-              </p>
-            </div>
-          </button>
-          <p className="text-center text-[10.5px] text-muted-foreground">
-            A IA nunca publica sem sua revisão.
-          </p>
+      {step === "issues" && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-[14px] font-medium">
+              Encontramos alguns itens que precisam de atenção.
+            </p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Nada é alterado sem sua confirmação.
+            </p>
+          </div>
+          <ul className="flex flex-col gap-2">
+            <IssueRow
+              label="produtos sem imagem"
+              count={issues.noImage}
+              tone={issues.noImage ? "warn" : "ok"}
+            />
+            <IssueRow
+              label="preços inválidos"
+              count={issues.badPrice}
+              tone={issues.badPrice ? "warn" : "ok"}
+            />
+            <IssueRow
+              label="categorias desconhecidas"
+              count={issues.unknownCat}
+              tone={issues.unknownCat ? "warn" : "ok"}
+            />
+          </ul>
+          <div className="flex flex-col gap-2 pt-1">
+            <button
+              onClick={() => setStep("review")}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
+            >
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} />
+              Corrigir automaticamente
+            </button>
+            <button
+              onClick={() => setStep("review")}
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12.5px] font-medium hover:bg-white/[0.06]"
+            >
+              Revisar manualmente
+            </button>
+          </div>
         </div>
       )}
 
@@ -1045,7 +1499,7 @@ function ImportModal({
           <div>
             <p className="text-[13px] font-medium">Revisar catálogo</p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              {rows.length} produtos encontrados. Ajuste antes de publicar.
+              {rows.length} produtos encontrados. Confirme antes de publicar.
             </p>
           </div>
           <div className="flex max-h-[42vh] flex-col gap-2 overflow-y-auto">
@@ -1053,14 +1507,19 @@ function ImportModal({
               <div key={r.id} className="glass flex items-center gap-3 rounded-2xl p-3">
                 <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
                   {r.image ? (
-                    <img src={r.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img
+                      src={r.image}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       <ImageOff className="h-3.5 w-3.5 text-white/30" strokeWidth={1.5} />
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[12.5px] font-medium">{r.name}</p>
                   <p className="text-[10.5px] text-muted-foreground">
                     {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
@@ -1079,15 +1538,42 @@ function ImportModal({
             </button>
             <button
               onClick={() => onPublish(rows)}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white active:scale-[0.98] transition-transform"
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white transition-transform active:scale-[0.98]"
             >
-              Publicar catálogo
+              Publicar
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
             </button>
           </div>
         </div>
       )}
     </Modal>
+  );
+}
+
+function IssueRow({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone: "warn" | "ok";
+}) {
+  const cls =
+    tone === "warn"
+      ? "bg-amber-500/10 text-amber-300 ring-amber-400/20"
+      : "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20";
+  const Icon = tone === "warn" ? AlertTriangle : Check;
+  return (
+    <li
+      className={`flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ${cls}`}
+    >
+      <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
+      <p className="text-[12.5px]">
+        <span className="font-semibold tabular-nums">{count}</span>{" "}
+        <span className="opacity-90">{label}</span>
+      </p>
+    </li>
   );
 }
 
@@ -1098,7 +1584,9 @@ function StatusChip({ status }: { status: CatalogRow["status"] }) {
     "sem-imagem": { label: "Sem imagem", cls: "bg-red-500/15 text-red-300" },
   } as const;
   const s = map[status];
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${s.cls}`}>{s.label}</span>;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${s.cls}`}>{s.label}</span>
+  );
 }
 
 /* ─────────────────────────── QR modal ─────────────────────────── */
@@ -1113,7 +1601,7 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
   }
 
   return (
-    <Modal onClose={onClose} title="QR Code gerado">
+    <Modal onClose={onClose} title="QR Code">
       <div className="flex flex-col items-center gap-4">
         <div className="rounded-2xl bg-white p-4">
           <FakeQr seed={product.id} size={168} />
@@ -1123,32 +1611,35 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
           <p className="mt-1 text-[11px] text-muted-foreground">{link}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <ModalBtn Icon={Download} label="Baixar QR" />
+          <ModalBtn Icon={Download} label="Baixar QR" primary />
           <ModalBtn Icon={Copy} label={copied ? "Copiado" : "Copiar link"} onClick={copyLink} />
-          <ModalBtn Icon={MessageCircle} label="WhatsApp" />
           <ModalBtn Icon={Printer} label="Imprimir etiqueta" />
-        </div>
-        <div className="w-full rounded-2xl bg-white p-3 text-black">
-          <div className="flex items-center gap-3">
-            <FakeQr seed={product.id} size={56} />
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider">AuraFit</p>
-              <p className="text-[12px] font-medium leading-tight">
-                Escaneie e veja<br />como fica em você.
-              </p>
-            </div>
-          </div>
+          <ModalBtn Icon={MessageCircle} label="WhatsApp" />
         </div>
       </div>
     </Modal>
   );
 }
 
-function ModalBtn({ Icon, label, onClick }: { Icon: React.ElementType; label: string; onClick?: () => void }) {
+function ModalBtn({
+  Icon,
+  label,
+  onClick,
+  primary,
+}: {
+  Icon: React.ElementType;
+  label: string;
+  onClick?: () => void;
+  primary?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11.5px] font-medium hover:bg-white/[0.06]"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[11.5px] font-medium transition-colors ${
+        primary
+          ? "bg-brand text-white hover:brightness-110"
+          : "border border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+      }`}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={1.7} />
       {label}
@@ -1169,7 +1660,6 @@ function AddProductModal({
   const [category, setCategory] = useState<StudioCategory>("superior");
   const [image, setImage] = useState("");
   const [buyUrl, setBuyUrl] = useState("");
-  const [wa, setWa] = useState("");
   const [sku, setSku] = useState("");
 
   const isPro = PRO_CATEGORIES.includes(category);
@@ -1185,7 +1675,6 @@ function AddProductModal({
       buyUrl: buyUrl.trim() || undefined,
       sku: sku.trim() || undefined,
     });
-    void wa;
   }
 
   const cats: Array<{ key: StudioCategory; label: string; pro?: boolean }> = [
@@ -1202,7 +1691,9 @@ function AddProductModal({
         <MField label="Nome do produto" value={name} onChange={setName} placeholder="Ex: Jaqueta Jeans" />
         <MField label="Foto (URL)" value={image} onChange={setImage} placeholder="https://…" />
         <div className="glass rounded-2xl p-3.5">
-          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">Categoria</label>
+          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+            Categoria
+          </label>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {cats.map((c) => {
               const active = category === c.key;
@@ -1230,12 +1721,11 @@ function AddProductModal({
         </div>
         <MField label="Preço" value={price} onChange={setPrice} placeholder="0,00" type="number" />
         <MField label="Link de compra" value={buyUrl} onChange={setBuyUrl} placeholder="https://" />
-        <MField label="WhatsApp da loja" value={wa} onChange={setWa} placeholder="(11) 99999-9999" />
         <MField label="SKU (opcional)" value={sku} onChange={setSku} placeholder="SKU-001" />
         <button
           onClick={handleSubmit}
           disabled={!valid}
-          className="mt-2 rounded-full bg-brand py-3 text-[13px] font-medium text-white active:scale-[0.99] transition-transform disabled:opacity-40"
+          className="mt-2 rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-40"
         >
           Salvar produto
         </button>
@@ -1259,7 +1749,9 @@ function MField({
 }) {
   return (
     <div className="glass rounded-2xl p-3.5">
-      <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">{label}</label>
+      <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </label>
       <input
         type={type}
         value={value}
