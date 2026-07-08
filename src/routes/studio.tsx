@@ -360,6 +360,17 @@ function Dashboard({
         </h1>
       </section>
 
+      {products.length > 0 && (
+        <div className="glass flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+            <Check className="h-4 w-4" strokeWidth={2} />
+          </div>
+          <p className="text-[12.5px] leading-snug">
+            Sua loja já pode oferecer o provador virtual.
+          </p>
+        </div>
+      )}
+
       <section className="flex flex-col gap-2.5">
         <BigKpi
           label="Produtos experimentados"
