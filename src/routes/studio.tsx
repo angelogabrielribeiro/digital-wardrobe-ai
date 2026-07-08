@@ -1703,6 +1703,39 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
   );
 }
 
+/* ─────────────────────────── Link modal ─────────────────────────── */
+function LinkModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const link = `https://aurafit.app/try/${product.id}`;
+
+  function copyLink() {
+    navigator.clipboard?.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <Modal onClose={onClose} title="Link do provador">
+      <div className="flex flex-col gap-4">
+        <p className="text-[12.5px] text-muted-foreground">
+          Use este link na página do produto do seu ecommerce.
+        </p>
+        <div className="glass rounded-2xl p-4">
+          <p className="text-[13px] font-medium">{product.name}</p>
+          <p className="mt-2 break-all text-[12px] text-muted-foreground">{link}</p>
+        </div>
+        <button
+          onClick={copyLink}
+          className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12.5px] font-medium text-white active:scale-[0.98]"
+        >
+          <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {copied ? "Copiado" : "Copiar link"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function ModalBtn({
   Icon,
   label,
