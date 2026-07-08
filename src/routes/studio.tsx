@@ -1085,7 +1085,7 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
           const pct = Math.max(6, Math.round((s.value / max) * 100));
           return (
             <div key={s.label} className="flex flex-col items-center gap-1.5">
-              <div className="relative h-14 w-full overflow-hidden rounded-lg bg-white/[0.03]">
+              <div className="relative h-9 w-full overflow-hidden rounded-lg bg-white/[0.03]">
                 <div
                   className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand to-[#8f88ff]"
                   style={{ height: `${pct}%` }}
