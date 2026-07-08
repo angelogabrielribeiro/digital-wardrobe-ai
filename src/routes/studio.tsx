@@ -36,7 +36,7 @@ import {
 import {
   MOCK_IMPORT_ROWS,
   CATEGORY_LABEL,
-  CATEGORY_INTEREST,
+  
   FORGOTTEN,
   KPIS,
   PRO_CATEGORIES,
@@ -66,7 +66,9 @@ export const Route = createFileRoute("/studio")({
   component: StudioApp,
 });
 
-type Tab = "dashboard" | "produtos" | "qr" | "insights" | "loja";
+type Tab = "dashboard" | "produtos" | "publicacao" | "insights" | "loja";
+
+export type StoreChannels = { fisica: boolean; ecommerce: boolean };
 
 /* ─────────────────────────── Root ─────────────────────────── */
 function StudioApp() {
@@ -76,10 +78,12 @@ function StudioApp() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
+  const [linkProduct, setLinkProduct] = useState<StudioProduct | null>(null);
   const [detailProduct, setDetailProduct] = useState<StudioProduct | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [promoteName, setPromoteName] = useState<string | null>(null);
   const [interestedOpen, setInterestedOpen] = useState(false);
+  const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
   const showOnboarding = !onboardingDone && products.length === 0;
 
@@ -95,7 +99,6 @@ function StudioApp() {
   }
 
   function handlePublishImport(rows: CatalogRow[]) {
-    // Enrich with fake baseline stats so insights feel populated.
     const added: StudioProduct[] = rows.map((r, i) => ({
       id: crypto.randomUUID(),
       name: r.name,
@@ -146,7 +149,14 @@ function StudioApp() {
                 onQr={(p) => setQrProduct(p)}
               />
             )}
-            {tab === "qr" && <QrCodes products={products} onOpen={(p) => setQrProduct(p)} />}
+            {tab === "publicacao" && (
+              <PublishPage
+                products={products}
+                channels={channels}
+                onQr={(p) => setQrProduct(p)}
+                onLink={(p) => setLinkProduct(p)}
+              />
+            )}
             {tab === "insights" && (
               <Insights
                 products={products}
@@ -154,7 +164,7 @@ function StudioApp() {
                 onOpenInterested={() => setInterestedOpen(true)}
               />
             )}
-            {tab === "loja" && <StorePage />}
+            {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
           </>
         )}
       </main>
@@ -165,6 +175,7 @@ function StudioApp() {
         <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
       )}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
+      {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
           product={detailProduct}
@@ -219,7 +230,7 @@ function Onboarding({
   const steps = [
     {
       key: "import",
-      title: "Importar catálogo",
+      title: "Importar produtos",
       desc: "Envie sua planilha e o AuraFit organiza tudo.",
       icon: Upload,
       cta: "Importar",
@@ -227,20 +238,20 @@ function Onboarding({
       action: onImport,
     },
     {
-      key: "qr",
-      title: "Gerar QR Codes",
-      desc: "Cada peça ganha um código para vitrine, cabide ou etiqueta.",
-      icon: QrCode,
-      cta: "Ver QR Codes",
+      key: "review",
+      title: "Revisar produtos",
+      desc: "Confira nomes, imagens e categorias antes de publicar.",
+      icon: Check,
+      cta: "Revisar",
       done: false,
       action: onFinish,
     },
     {
-      key: "track",
-      title: "Acompanhar resultados",
-      desc: "Veja o que seus clientes experimentam e o que gera mais interesse.",
-      icon: BarChart3,
-      cta: "Ir para o painel",
+      key: "publish",
+      title: "Publicar",
+      desc: "Gere links para ecommerce e QR Codes para a loja física.",
+      icon: QrCode,
+      cta: "Publicar",
       done: false,
       action: onFinish,
     },
@@ -348,6 +359,17 @@ function Dashboard({
           Painel
         </h1>
       </section>
+
+      {products.length > 0 && (
+        <div className="glass flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+            <Check className="h-4 w-4" strokeWidth={2} />
+          </div>
+          <p className="text-[12.5px] leading-snug">
+            Sua loja já pode oferecer o provador virtual.
+          </p>
+        </div>
+      )}
 
       <section className="flex flex-col gap-2.5">
         <BigKpi
@@ -728,81 +750,89 @@ function ProductDetailModal({
 }
 
 /* ─────────────────────────── QR Codes ─────────────────────────── */
-function QrCodes({
+function PublishPage({
   products,
-  onOpen,
+  channels,
+  onQr,
+  onLink,
 }: {
   products: StudioProduct[];
-  onOpen: (p: StudioProduct) => void;
+  channels: StoreChannels;
+  onQr: (p: StudioProduct) => void;
+  onLink: (p: StudioProduct) => void;
 }) {
+  const noChannel = !channels.fisica && !channels.ecommerce;
   return (
     <div className="flex flex-col gap-5 px-5 pt-7 fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Provador na loja
+          Provador para o cliente
         </p>
         <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
-          QR Codes
+          Publicação
         </h1>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          Use na vitrine, etiqueta, cabide ou balcão. O cliente escaneia e experimenta a peça na
-          hora.
+          Disponibilize o provador para cada peça. Use um link no ecommerce ou um QR Code na loja
+          física.
         </p>
       </header>
 
-      <div className="glass rounded-3xl p-4">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Exemplo de etiqueta
-        </p>
-        <div className="mt-3 flex items-center gap-4 rounded-2xl bg-white p-4 text-black">
-          <FakeQr seed="demo" size={72} />
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-wider">AuraFit</p>
-            <p className="mt-1 text-[13.5px] font-medium leading-tight">
-              Escaneie e veja
-              <br />
-              como fica em você.
-            </p>
-          </div>
+      {noChannel && (
+        <div className="glass rounded-2xl p-4 text-[12.5px] text-muted-foreground">
+          Ative <span className="text-foreground">Loja física</span> ou{" "}
+          <span className="text-foreground">Ecommerce</span> em <em>Loja</em> para publicar o
+          provador.
         </div>
-      </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {products.length === 0 && (
           <p className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-xs text-muted-foreground">
-            Importe seu catálogo para gerar QR Codes.
+            Importe seu catálogo para começar a publicar.
           </p>
         )}
         {products.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onOpen(p)}
-            className="glass flex items-center gap-3 rounded-2xl p-3 text-left transition-all hover:border-white/[0.10] active:scale-[0.99]"
-          >
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
-              {p.image ? (
-                <img
-                  src={p.image}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
-                </div>
+          <div key={p.id} className="glass flex flex-col gap-3 rounded-2xl p-3">
+            <div className="flex items-center gap-3">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
+                {p.image ? (
+                  <img src={p.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium">{p.name}</p>
+                <p className="text-[10.5px] text-muted-foreground">{CATEGORY_LABEL[p.category]}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {channels.ecommerce && (
+                <button
+                  onClick={() => onLink(p)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium hover:bg-white/[0.06]"
+                >
+                  <Copy className="h-3 w-3" strokeWidth={1.8} /> Copiar Link
+                </button>
               )}
+              {channels.fisica && (
+                <button
+                  onClick={() => onQr(p)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium hover:bg-white/[0.06]"
+                >
+                  <QrCode className="h-3 w-3" strokeWidth={1.8} /> Gerar QR Code
+                </button>
+              )}
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1.5 text-[11px] font-medium text-brand hover:bg-brand/25"
+              >
+                <Eye className="h-3 w-3" strokeWidth={1.8} /> Abrir Provador
+              </Link>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium">{p.name}</p>
-              <p className="text-[10.5px] text-muted-foreground">
-                {CATEGORY_LABEL[p.category]}
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-[10.5px] font-medium text-brand">
-              <Download className="h-3 w-3" strokeWidth={1.8} /> Baixar QR
-            </span>
-          </button>
+          </div>
         ))}
       </div>
     </div>
@@ -929,26 +959,6 @@ function Insights({
         ))}
       </section>
 
-      {/* 3. Category interest */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Interesse" title="Categorias mais experimentadas" />
-        <div className="glass flex flex-col gap-3 rounded-3xl p-5">
-          {CATEGORY_INTEREST.map((c) => (
-            <div key={c.label}>
-              <div className="mb-1 flex items-center justify-between text-[12px]">
-                <span>{c.label}</span>
-                <span className="text-muted-foreground">{c.pct}%</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-brand to-[#8f88ff]"
-                  style={{ width: `${c.pct}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* 4. Forgotten */}
       <section className="flex flex-col gap-3">
@@ -1086,7 +1096,7 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
           const pct = Math.max(6, Math.round((s.value / max) * 100));
           return (
             <div key={s.label} className="flex flex-col items-center gap-1.5">
-              <div className="relative h-14 w-full overflow-hidden rounded-lg bg-white/[0.03]">
+              <div className="relative h-9 w-full overflow-hidden rounded-lg bg-white/[0.03]">
                 <div
                   className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand to-[#8f88ff]"
                   style={{ height: `${pct}%` }}
@@ -1105,7 +1115,13 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
 }
 
 /* ─────────────────────────── Store settings ─────────────────────────── */
-function StorePage() {
+function StorePage({
+  channels,
+  onChannels,
+}: {
+  channels: StoreChannels;
+  onChannels: (c: StoreChannels) => void;
+}) {
   const [name, setName] = useState("Minha Loja");
   const [color, setColor] = useState("#6C63FF");
   const [wa, setWa] = useState("");
@@ -1123,6 +1139,25 @@ function StorePage() {
           Minha loja
         </h1>
       </header>
+
+      {/* Block: Canais */}
+      <Block overline="Canais" title="Onde sua loja atende">
+        <div className="glass flex flex-col divide-y divide-white/[0.06] rounded-2xl">
+          <ChannelToggle
+            label="Loja física"
+            desc="Habilita QR Codes para vitrine, etiqueta e balcão."
+            checked={channels.fisica}
+            onChange={(v) => onChannels({ ...channels, fisica: v })}
+          />
+          <ChannelToggle
+            label="Ecommerce"
+            desc="Habilita link do provador para páginas de produto."
+            checked={channels.ecommerce}
+            onChange={(v) => onChannels({ ...channels, ecommerce: v })}
+          />
+        </div>
+      </Block>
+
 
       {/* Block: Sua marca */}
       <Block overline="Bloco 1" title="Sua marca">
@@ -1282,12 +1317,50 @@ function Field({
   );
 }
 
+function ChannelToggle({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 p-4">
+      <div className="flex-1">
+        <p className="text-[13px] font-medium">{label}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{desc}</p>
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <span
+        className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors ${
+          checked ? "bg-brand" : "bg-white/[0.08]"
+        }`}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+            checked ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+    </label>
+  );
+}
+
 /* ─────────────────────────── Bottom nav ─────────────────────────── */
 function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => void }) {
   const items: Array<{ tab: Tab; label: string; icon: React.ElementType }> = [
     { tab: "dashboard", label: "Painel", icon: LayoutDashboard },
     { tab: "produtos", label: "Produtos", icon: Package },
-    { tab: "qr", label: "QR Codes", icon: QrCode },
+    { tab: "publicacao", label: "Publicação", icon: QrCode },
     { tab: "insights", label: "Insights", icon: BarChart3 },
     { tab: "loja", label: "Loja", icon: StoreIcon },
   ];
@@ -1616,6 +1689,39 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
           <ModalBtn Icon={Printer} label="Imprimir etiqueta" />
           <ModalBtn Icon={MessageCircle} label="WhatsApp" />
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ─────────────────────────── Link modal ─────────────────────────── */
+function LinkModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const link = `https://aurafit.app/try/${product.id}`;
+
+  function copyLink() {
+    navigator.clipboard?.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <Modal onClose={onClose} title="Link do provador">
+      <div className="flex flex-col gap-4">
+        <p className="text-[12.5px] text-muted-foreground">
+          Use este link na página do produto do seu ecommerce.
+        </p>
+        <div className="glass rounded-2xl p-4">
+          <p className="text-[13px] font-medium">{product.name}</p>
+          <p className="mt-2 break-all text-[12px] text-muted-foreground">{link}</p>
+        </div>
+        <button
+          onClick={copyLink}
+          className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12.5px] font-medium text-white active:scale-[0.98]"
+        >
+          <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {copied ? "Copiado" : "Copiar link"}
+        </button>
       </div>
     </Modal>
   );
