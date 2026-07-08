@@ -827,7 +827,6 @@ function PublishPage({
     </div>
   );
 }
-}
 
 function FakeQr({ seed, size = 160 }: { seed: string; size?: number }) {
   const cells = 21;
