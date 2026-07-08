@@ -66,7 +66,9 @@ export const Route = createFileRoute("/studio")({
   component: StudioApp,
 });
 
-type Tab = "dashboard" | "produtos" | "qr" | "insights" | "loja";
+type Tab = "dashboard" | "produtos" | "publicacao" | "insights" | "loja";
+
+export type StoreChannels = { fisica: boolean; ecommerce: boolean };
 
 /* ─────────────────────────── Root ─────────────────────────── */
 function StudioApp() {
@@ -76,77 +78,23 @@ function StudioApp() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
+  const [linkProduct, setLinkProduct] = useState<StudioProduct | null>(null);
   const [detailProduct, setDetailProduct] = useState<StudioProduct | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [promoteName, setPromoteName] = useState<string | null>(null);
   const [interestedOpen, setInterestedOpen] = useState(false);
+  const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
   const showOnboarding = !onboardingDone && products.length === 0;
-
-  function handleAddProduct(p: Omit<StudioProduct, "id" | "stats" | "status">) {
-    const newP: StudioProduct = {
-      ...p,
-      id: crypto.randomUUID(),
-      status: p.image ? "pronto" : "sem-imagem",
-      stats: { views: 0, tryons: 0, saves: 0, buyClicks: 0 },
-    };
-    setProducts((s) => [newP, ...s]);
-    setAddOpen(false);
-  }
-
-  function handlePublishImport(rows: CatalogRow[]) {
-    // Enrich with fake baseline stats so insights feel populated.
-    const added: StudioProduct[] = rows.map((r, i) => ({
-      id: crypto.randomUUID(),
-      name: r.name,
-      category: r.category,
-      price: r.price,
-      sku: r.sku,
-      image: r.image ?? "",
-      buyUrl: r.buyUrl,
-      status: r.status,
-      stats: MOCK_PRODUCTS[i % MOCK_PRODUCTS.length]?.stats ?? {
-        views: 0,
-        tryons: 0,
-        saves: 0,
-        buyClicks: 0,
-      },
-    }));
-    setProducts((s) => [...added, ...s]);
-    setImportOpen(false);
-    setTab("produtos");
-  }
-
-  return (
-    <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
-      <StudioHeader />
-
-      <main className="flex-1">
-        {showOnboarding ? (
-          <Onboarding
-            onImport={() => setImportOpen(true)}
-            onFinish={() => setOnboardingDone(true)}
-            hasProducts={products.length > 0}
-          />
-        ) : (
-          <>
-            {tab === "dashboard" && (
-              <Dashboard
+...
+            {tab === "publicacao" && (
+              <PublishPage
                 products={products}
-                onImport={() => setImportOpen(true)}
-                onOpenInterested={() => setInterestedOpen(true)}
-              />
-            )}
-            {tab === "produtos" && (
-              <Products
-                products={products}
-                onImport={() => setImportOpen(true)}
-                onAdd={() => setAddOpen(true)}
-                onOpen={(p) => setDetailProduct(p)}
+                channels={channels}
                 onQr={(p) => setQrProduct(p)}
+                onLink={(p) => setLinkProduct(p)}
               />
             )}
-            {tab === "qr" && <QrCodes products={products} onOpen={(p) => setQrProduct(p)} />}
             {tab === "insights" && (
               <Insights
                 products={products}
@@ -154,7 +102,7 @@ function StudioApp() {
                 onOpenInterested={() => setInterestedOpen(true)}
               />
             )}
-            {tab === "loja" && <StorePage />}
+            {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
           </>
         )}
       </main>
@@ -165,6 +113,7 @@ function StudioApp() {
         <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
       )}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
+      {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
           product={detailProduct}
