@@ -739,85 +739,94 @@ function ProductDetailModal({
 }
 
 /* ─────────────────────────── QR Codes ─────────────────────────── */
-function QrCodes({
+function PublishPage({
   products,
-  onOpen,
+  channels,
+  onQr,
+  onLink,
 }: {
   products: StudioProduct[];
-  onOpen: (p: StudioProduct) => void;
+  channels: StoreChannels;
+  onQr: (p: StudioProduct) => void;
+  onLink: (p: StudioProduct) => void;
 }) {
+  const noChannel = !channels.fisica && !channels.ecommerce;
   return (
     <div className="flex flex-col gap-5 px-5 pt-7 fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Provador na loja
+          Provador para o cliente
         </p>
         <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
-          QR Codes
+          Publicação
         </h1>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          Use na vitrine, etiqueta, cabide ou balcão. O cliente escaneia e experimenta a peça na
-          hora.
+          Disponibilize o provador para cada peça. Use um link no ecommerce ou um QR Code na loja
+          física.
         </p>
       </header>
 
-      <div className="glass rounded-3xl p-4">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Exemplo de etiqueta
-        </p>
-        <div className="mt-3 flex items-center gap-4 rounded-2xl bg-white p-4 text-black">
-          <FakeQr seed="demo" size={72} />
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-wider">AuraFit</p>
-            <p className="mt-1 text-[13.5px] font-medium leading-tight">
-              Escaneie e veja
-              <br />
-              como fica em você.
-            </p>
-          </div>
+      {noChannel && (
+        <div className="glass rounded-2xl p-4 text-[12.5px] text-muted-foreground">
+          Ative <span className="text-foreground">Loja física</span> ou{" "}
+          <span className="text-foreground">Ecommerce</span> em <em>Loja</em> para publicar o
+          provador.
         </div>
-      </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {products.length === 0 && (
           <p className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-xs text-muted-foreground">
-            Importe seu catálogo para gerar QR Codes.
+            Importe seu catálogo para começar a publicar.
           </p>
         )}
         {products.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onOpen(p)}
-            className="glass flex items-center gap-3 rounded-2xl p-3 text-left transition-all hover:border-white/[0.10] active:scale-[0.99]"
-          >
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
-              {p.image ? (
-                <img
-                  src={p.image}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
-                </div>
+          <div key={p.id} className="glass flex flex-col gap-3 rounded-2xl p-3">
+            <div className="flex items-center gap-3">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
+                {p.image ? (
+                  <img src={p.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium">{p.name}</p>
+                <p className="text-[10.5px] text-muted-foreground">{CATEGORY_LABEL[p.category]}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {channels.ecommerce && (
+                <button
+                  onClick={() => onLink(p)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium hover:bg-white/[0.06]"
+                >
+                  <Copy className="h-3 w-3" strokeWidth={1.8} /> Copiar Link
+                </button>
               )}
+              {channels.fisica && (
+                <button
+                  onClick={() => onQr(p)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium hover:bg-white/[0.06]"
+                >
+                  <QrCode className="h-3 w-3" strokeWidth={1.8} /> Gerar QR Code
+                </button>
+              )}
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1.5 text-[11px] font-medium text-brand hover:bg-brand/25"
+              >
+                <Eye className="h-3 w-3" strokeWidth={1.8} /> Abrir Provador
+              </Link>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium">{p.name}</p>
-              <p className="text-[10.5px] text-muted-foreground">
-                {CATEGORY_LABEL[p.category]}
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-[10.5px] font-medium text-brand">
-              <Download className="h-3 w-3" strokeWidth={1.8} /> Baixar QR
-            </span>
-          </button>
+          </div>
         ))}
       </div>
     </div>
   );
+}
 }
 
 function FakeQr({ seed, size = 160 }: { seed: string; size?: number }) {
