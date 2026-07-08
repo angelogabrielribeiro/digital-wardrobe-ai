@@ -1124,7 +1124,13 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
 }
 
 /* ─────────────────────────── Store settings ─────────────────────────── */
-function StorePage() {
+function StorePage({
+  channels,
+  onChannels,
+}: {
+  channels: StoreChannels;
+  onChannels: (c: StoreChannels) => void;
+}) {
   const [name, setName] = useState("Minha Loja");
   const [color, setColor] = useState("#6C63FF");
   const [wa, setWa] = useState("");
@@ -1142,6 +1148,25 @@ function StorePage() {
           Minha loja
         </h1>
       </header>
+
+      {/* Block: Canais */}
+      <Block overline="Canais" title="Onde sua loja atende">
+        <div className="glass flex flex-col divide-y divide-white/[0.06] rounded-2xl">
+          <ChannelToggle
+            label="Loja física"
+            desc="Habilita QR Codes para vitrine, etiqueta e balcão."
+            checked={channels.fisica}
+            onChange={(v) => onChannels({ ...channels, fisica: v })}
+          />
+          <ChannelToggle
+            label="Ecommerce"
+            desc="Habilita link do provador para páginas de produto."
+            checked={channels.ecommerce}
+            onChange={(v) => onChannels({ ...channels, ecommerce: v })}
+          />
+        </div>
+      </Block>
+
 
       {/* Block: Sua marca */}
       <Block overline="Bloco 1" title="Sua marca">
