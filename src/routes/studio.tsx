@@ -86,7 +86,69 @@ function StudioApp() {
   const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
   const showOnboarding = !onboardingDone && products.length === 0;
-...
+
+  function handleAddProduct(p: Omit<StudioProduct, "id" | "stats" | "status">) {
+    const newP: StudioProduct = {
+      ...p,
+      id: crypto.randomUUID(),
+      status: p.image ? "pronto" : "sem-imagem",
+      stats: { views: 0, tryons: 0, saves: 0, buyClicks: 0 },
+    };
+    setProducts((s) => [newP, ...s]);
+    setAddOpen(false);
+  }
+
+  function handlePublishImport(rows: CatalogRow[]) {
+    const added: StudioProduct[] = rows.map((r, i) => ({
+      id: crypto.randomUUID(),
+      name: r.name,
+      category: r.category,
+      price: r.price,
+      sku: r.sku,
+      image: r.image ?? "",
+      buyUrl: r.buyUrl,
+      status: r.status,
+      stats: MOCK_PRODUCTS[i % MOCK_PRODUCTS.length]?.stats ?? {
+        views: 0,
+        tryons: 0,
+        saves: 0,
+        buyClicks: 0,
+      },
+    }));
+    setProducts((s) => [...added, ...s]);
+    setImportOpen(false);
+    setTab("produtos");
+  }
+
+  return (
+    <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
+      <StudioHeader />
+
+      <main className="flex-1">
+        {showOnboarding ? (
+          <Onboarding
+            onImport={() => setImportOpen(true)}
+            onFinish={() => setOnboardingDone(true)}
+            hasProducts={products.length > 0}
+          />
+        ) : (
+          <>
+            {tab === "dashboard" && (
+              <Dashboard
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onOpenInterested={() => setInterestedOpen(true)}
+              />
+            )}
+            {tab === "produtos" && (
+              <Products
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onAdd={() => setAddOpen(true)}
+                onOpen={(p) => setDetailProduct(p)}
+                onQr={(p) => setQrProduct(p)}
+              />
+            )}
             {tab === "publicacao" && (
               <PublishPage
                 products={products}
