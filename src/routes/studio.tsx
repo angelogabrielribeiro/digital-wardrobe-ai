@@ -1326,12 +1326,50 @@ function Field({
   );
 }
 
+function ChannelToggle({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 p-4">
+      <div className="flex-1">
+        <p className="text-[13px] font-medium">{label}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{desc}</p>
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <span
+        className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors ${
+          checked ? "bg-brand" : "bg-white/[0.08]"
+        }`}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+            checked ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+    </label>
+  );
+}
+
 /* ─────────────────────────── Bottom nav ─────────────────────────── */
 function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => void }) {
   const items: Array<{ tab: Tab; label: string; icon: React.ElementType }> = [
     { tab: "dashboard", label: "Painel", icon: LayoutDashboard },
     { tab: "produtos", label: "Produtos", icon: Package },
-    { tab: "qr", label: "QR Codes", icon: QrCode },
+    { tab: "publicacao", label: "Publicação", icon: QrCode },
     { tab: "insights", label: "Insights", icon: BarChart3 },
     { tab: "loja", label: "Loja", icon: StoreIcon },
   ];
