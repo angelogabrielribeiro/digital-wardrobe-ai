@@ -948,26 +948,6 @@ function Insights({
         ))}
       </section>
 
-      {/* 3. Category interest */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Interesse" title="Categorias mais experimentadas" />
-        <div className="glass flex flex-col gap-3 rounded-3xl p-5">
-          {CATEGORY_INTEREST.map((c) => (
-            <div key={c.label}>
-              <div className="mb-1 flex items-center justify-between text-[12px]">
-                <span>{c.label}</span>
-                <span className="text-muted-foreground">{c.pct}%</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-brand to-[#8f88ff]"
-                  style={{ width: `${c.pct}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* 4. Forgotten */}
       <section className="flex flex-col gap-3">
