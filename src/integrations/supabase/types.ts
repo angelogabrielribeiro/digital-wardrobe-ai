@@ -14,13 +14,181 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      experiments: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "experiments_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          buy_url: string | null
+          categoria: string
+          created_at: string
+          descricao: string | null
+          id: string
+          imagem: string | null
+          nome: string
+          preco: number
+          sku: string | null
+          status: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          buy_url?: string | null
+          categoria?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          imagem?: string | null
+          nome: string
+          preco?: number
+          sku?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          buy_url?: string | null
+          categoria?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          imagem?: string | null
+          nome?: string
+          preco?: number
+          sku?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      qrcodes: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qrcodes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          cor: string
+          created_at: string
+          endereco: string | null
+          id: string
+          instagram: string | null
+          logo: string | null
+          nome: string
+          owner_id: string
+          updated_at: string
+          website: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          cor?: string
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          instagram?: string | null
+          logo?: string | null
+          nome?: string
+          owner_id: string
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          cor?: string
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          instagram?: string | null
+          logo?: string | null
+          nome?: string
+          owner_id?: string
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      current_store_id: { Args: never; Returns: string }
+      owns_product: { Args: { _product_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
