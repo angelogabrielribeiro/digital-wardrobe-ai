@@ -1,51 +1,84 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  Package,
-  QrCode,
-  BarChart3,
-  Store as StoreIcon,
-  ArrowLeft,
-  Upload,
-  FileSpreadsheet,
-  Sparkles,
-  ArrowRight,
-  Plus,
-  Search,
-  Download,
-  Copy,
-  Printer,
-  MessageCircle,
-  X,
-  TrendingUp,
-  Eye,
-  Bookmark,
-  ShoppingBag,
-  Instagram,
-  Globe,
-  MapPin,
-  Phone,
-  Check,
-  AlertTriangle,
-  ImageOff,
-  Lock,
-  Pencil,
-  Info,
+  LayoutDashboard, Package, QrCode, BarChart3, Store as StoreIcon,
+  ArrowLeft, Upload, FileSpreadsheet, Sparkles, ArrowRight, Plus, Search,
+  Download, Copy, Printer, MessageCircle, X, TrendingUp, Eye, Bookmark,
+  ShoppingBag, Instagram, Globe, MapPin, Phone, Check, AlertTriangle,
+  ImageOff, Lock, Pencil, Info, LogOut,
 } from "lucide-react";
 import {
-  MOCK_IMPORT_ROWS,
-  CATEGORY_LABEL,
-  
-  FORGOTTEN,
-  KPIS,
-  PRO_CATEGORIES,
-  WEEK_INSIGHTS,
-  MOCK_PRODUCTS,
-  type StudioProduct,
-  type StudioCategory,
-  type CatalogRow,
-} from "@/lib/studio-mock";
+  bulkCreateProducts, createProduct, deleteProduct, fetchInsights,
+  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
+  type Product, type ProductInput, type StoreProfile, type StudioCategory,
+} from "@/lib/db";
+import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
+import { uploadProductImage } from "@/lib/upload";
+import { parseCsv } from "@/lib/csv";
+import { signOut, useAuth } from "@/hooks/use-auth";
+
+const CATEGORY_LABEL: Record<StudioCategory, string> = {
+  superior: "Superior",
+  inferior: "Inferior",
+  "peca-unica": "Peça única",
+  calcados: "Calçados",
+  acessorios: "Acessórios",
+};
+const PRO_CATEGORIES: StudioCategory[] = ["calcados", "acessorios"];
+
+// Visual-layer product shape kept for compatibility with existing components.
+export type StudioProduct = {
+  id: string;
+  name: string;
+  category: StudioCategory;
+  price: number;
+  sku?: string;
+  image: string;
+  buyUrl?: string;
+  status: "pronto" | "revisar" | "sem-imagem";
+  stats: { views: number; tryons: number; saves: number; buyClicks: number };
+  qrToken?: string;
+};
+
+type CatalogRow = {
+  id: string;
+  name: string;
+  category: StudioCategory;
+  price: number;
+  sku?: string;
+  image?: string;
+  buyUrl?: string;
+  status: "pronto" | "revisar" | "sem-imagem";
+};
+
+function toStudioProduct(p: Product, tryons: number): StudioProduct {
+  return {
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    price: p.price,
+    sku: p.sku ?? undefined,
+    image: p.image,
+    buyUrl: p.buyUrl ?? undefined,
+    status: p.status,
+    stats: { views: tryons, tryons, saves: 0, buyClicks: 0 },
+    qrToken: p.qrToken,
+  };
+}
+
+// Compat stubs — real numbers vêm da UI condicional; ver Dashboard/Insights.
+const KPIS = { views: 0, looks: 0, triedProducts: 0, buyClicks: 0, estimatedSalesBRL: 0, intentRatePct: 0 };
+const MOCK_PRODUCTS: StudioProduct[] = [];
+const WEEK_INSIGHTS = {
+  topProduct: { name: "—", growthPct: 0 },
+  hotCategory: { name: "—", sharePct: 0 },
+  forgotten: { name: "—", tests: 0 },
+  recommendation: "Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes para começar a coletar experimentações.",
+};
+const FORGOTTEN: Array<{ name: string; tests: number }> = [];
+const MOCK_IMPORT_ROWS: CatalogRow[] = [];
+
 
 export const Route = createFileRoute("/studio")({
   head: () => ({
@@ -72,9 +105,37 @@ export type StoreChannels = { fisica: boolean; ecommerce: boolean };
 
 /* ─────────────────────────── Root ─────────────────────────── */
 function StudioApp() {
+  const { session, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!authLoading && !session) navigate({ to: "/auth", replace: true });
+  }, [session, authLoading, navigate]);
+
+  const productsQuery = useQuery({
+    queryKey: ["products"],
+    queryFn: fetchMyProducts,
+    enabled: !!session,
+  });
+  const insightsQuery = useQuery({
+    queryKey: ["insights"],
+    queryFn: fetchInsights,
+    enabled: !!session,
+  });
+
+  const tryonsByProduct = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of insightsQuery.data?.perProduct ?? []) m.set(row.product_id, row.count);
+    return m;
+  }, [insightsQuery.data]);
+
+  const products: StudioProduct[] = useMemo(
+    () => (productsQuery.data ?? []).map((p) => toStudioProduct(p, tryonsByProduct.get(p.id) ?? 0)),
+    [productsQuery.data, tryonsByProduct],
+  );
+
   const [tab, setTab] = useState<Tab>("dashboard");
-  // Start empty so onboarding shows naturally on first run.
-  const [products, setProducts] = useState<StudioProduct[]>([]);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
@@ -85,44 +146,30 @@ function StudioApp() {
   const [interestedOpen, setInterestedOpen] = useState(false);
   const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
-  const showOnboarding = !onboardingDone && products.length === 0;
+  const showOnboarding = !onboardingDone && products.length === 0 && !productsQuery.isLoading;
 
-  function handleAddProduct(p: Omit<StudioProduct, "id" | "stats" | "status">) {
-    const newP: StudioProduct = {
-      ...p,
-      id: crypto.randomUUID(),
-      status: p.image ? "pronto" : "sem-imagem",
-      stats: { views: 0, tryons: 0, saves: 0, buyClicks: 0 },
-    };
-    setProducts((s) => [newP, ...s]);
+  async function handleAddProduct(input: ProductInput) {
+    await createProduct(input);
+    await Promise.all([qc.invalidateQueries({ queryKey: ["products"] }), qc.invalidateQueries({ queryKey: ["insights"] })]);
     setAddOpen(false);
   }
-
-  function handlePublishImport(rows: CatalogRow[]) {
-    const added: StudioProduct[] = rows.map((r, i) => ({
-      id: crypto.randomUUID(),
-      name: r.name,
-      category: r.category,
-      price: r.price,
-      sku: r.sku,
-      image: r.image ?? "",
-      buyUrl: r.buyUrl,
-      status: r.status,
-      stats: MOCK_PRODUCTS[i % MOCK_PRODUCTS.length]?.stats ?? {
-        views: 0,
-        tryons: 0,
-        saves: 0,
-        buyClicks: 0,
-      },
-    }));
-    setProducts((s) => [...added, ...s]);
+  async function handlePublishImport(rows: CatalogRow[]) {
+    await bulkCreateProducts(rows.map((r) => ({
+      name: r.name, category: r.category, price: r.price,
+      image: r.image, sku: r.sku, buyUrl: r.buyUrl,
+    })));
+    await qc.invalidateQueries({ queryKey: ["products"] });
     setImportOpen(false);
     setTab("produtos");
   }
 
+  if (authLoading || !session) {
+    return <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Carregando…</div>;
+  }
+
   return (
     <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
-      <StudioHeader />
+      <StudioHeader onLogout={async () => { await signOut(); qc.clear(); navigate({ to: "/auth", replace: true }); }} />
 
       <main className="flex-1">
         {showOnboarding ? (
@@ -134,35 +181,17 @@ function StudioApp() {
         ) : (
           <>
             {tab === "dashboard" && (
-              <Dashboard
-                products={products}
-                onImport={() => setImportOpen(true)}
-                onOpenInterested={() => setInterestedOpen(true)}
-              />
+              <Dashboard products={products} onImport={() => setImportOpen(true)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
             {tab === "produtos" && (
-              <Products
-                products={products}
-                onImport={() => setImportOpen(true)}
-                onAdd={() => setAddOpen(true)}
-                onOpen={(p) => setDetailProduct(p)}
-                onQr={(p) => setQrProduct(p)}
-              />
+              <Products products={products} onImport={() => setImportOpen(true)} onAdd={() => setAddOpen(true)}
+                onOpen={(p) => setDetailProduct(p)} onQr={(p) => setQrProduct(p)} />
             )}
             {tab === "publicacao" && (
-              <PublishPage
-                products={products}
-                channels={channels}
-                onQr={(p) => setQrProduct(p)}
-                onLink={(p) => setLinkProduct(p)}
-              />
+              <PublishPage products={products} channels={channels} onQr={(p) => setQrProduct(p)} onLink={(p) => setLinkProduct(p)} />
             )}
             {tab === "insights" && (
-              <Insights
-                products={products}
-                onPromote={(n) => setPromoteName(n)}
-                onOpenInterested={() => setInterestedOpen(true)}
-              />
+              <Insights products={products} onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
             {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
           </>
@@ -171,19 +200,14 @@ function StudioApp() {
 
       {!showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
-      {importOpen && (
-        <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
-      )}
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
       {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
           product={detailProduct}
           onClose={() => setDetailProduct(null)}
-          onQr={() => {
-            setQrProduct(detailProduct);
-            setDetailProduct(null);
-          }}
+          onQr={() => { setQrProduct(detailProduct); setDetailProduct(null); }}
         />
       )}
       {addOpen && <AddProductModal onClose={() => setAddOpen(false)} onSave={handleAddProduct} />}
@@ -194,13 +218,10 @@ function StudioApp() {
 }
 
 /* ─────────────────────────── Header ─────────────────────────── */
-function StudioHeader() {
+function StudioHeader({ onLogout }: { onLogout: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[color:var(--border)] bg-background/80 px-5 py-3.5 backdrop-blur-xl">
-      <Link
-        to="/"
-        className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
+      <Link to="/" className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Modo Cliente
       </Link>
@@ -208,11 +229,9 @@ function StudioHeader() {
         <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={1.7} />
         <span className="text-[13px] font-medium tracking-tight">AuraFit Studio</span>
       </div>
-      <div className="w-[92px] text-right">
-        <span className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand">
-          Business
-        </span>
-      </div>
+      <button onClick={onLogout} className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Sair">
+        <LogOut className="h-3.5 w-3.5" strokeWidth={1.7} /> Sair
+      </button>
     </header>
   );
 }
@@ -1665,9 +1684,15 @@ function StatusChip({ status }: { status: CatalogRow["status"] }) {
 /* ─────────────────────────── QR modal ─────────────────────────── */
 function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const link = `https://aurafit.app/try/${product.id}`;
+  const [qrSrc, setQrSrc] = useState<string | null>(null);
+  const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
+
+  useEffect(() => {
+    if (product.qrToken) generateQrDataUrl(product.qrToken).then(setQrSrc).catch(() => setQrSrc(null));
+  }, [product.qrToken]);
 
   function copyLink() {
+    if (!link) return;
     navigator.clipboard?.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
@@ -1677,17 +1702,21 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
     <Modal onClose={onClose} title="QR Code">
       <div className="flex flex-col items-center gap-4">
         <div className="rounded-2xl bg-white p-4">
-          <FakeQr seed={product.id} size={168} />
+          {qrSrc ? (
+            <img src={qrSrc} alt={`QR ${product.name}`} width={168} height={168} />
+          ) : (
+            <div className="flex h-[168px] w-[168px] items-center justify-center text-xs text-muted-foreground">…</div>
+          )}
         </div>
         <div className="text-center">
           <p className="text-[13px] font-medium">{product.name}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">{link}</p>
+          <p className="mt-1 break-all text-[11px] text-muted-foreground">{link}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <ModalBtn Icon={Download} label="Baixar QR" primary />
+          <ModalBtn Icon={Download} label="Baixar QR" primary onClick={() => product.qrToken && downloadQr(product.qrToken, `qr-${product.name}`)} />
           <ModalBtn Icon={Copy} label={copied ? "Copiado" : "Copiar link"} onClick={copyLink} />
-          <ModalBtn Icon={Printer} label="Imprimir etiqueta" />
-          <ModalBtn Icon={MessageCircle} label="WhatsApp" />
+          <ModalBtn Icon={Printer} label="Imprimir" onClick={() => window.print()} />
+          <ModalBtn Icon={MessageCircle} label="WhatsApp" onClick={() => link && window.open(`https://wa.me/?text=${encodeURIComponent(`Experimente: ${link}`)}`, "_blank")} />
         </div>
       </div>
     </Modal>
@@ -1697,7 +1726,7 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
 /* ─────────────────────────── Link modal ─────────────────────────── */
 function LinkModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const link = `https://aurafit.app/try/${product.id}`;
+  const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
 
   function copyLink() {
     navigator.clipboard?.writeText(link);
