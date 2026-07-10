@@ -157,7 +157,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
 }
 
 export async function updateProduct(id: string, input: Partial<ProductInput>): Promise<void> {
-  const patch: Record<string, unknown> = {};
+  const patch: Database["public"]["Tables"]["products"]["Update"] = {};
   if (input.name !== undefined) patch.nome = input.name;
   if (input.category !== undefined) patch.categoria = input.category;
   if (input.price !== undefined) patch.preco = input.price;
