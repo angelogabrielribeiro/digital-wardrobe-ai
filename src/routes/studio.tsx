@@ -1684,9 +1684,15 @@ function StatusChip({ status }: { status: CatalogRow["status"] }) {
 /* ─────────────────────────── QR modal ─────────────────────────── */
 function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const link = `https://aurafit.app/try/${product.id}`;
+  const [qrSrc, setQrSrc] = useState<string | null>(null);
+  const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
+
+  useEffect(() => {
+    if (product.qrToken) generateQrDataUrl(product.qrToken).then(setQrSrc).catch(() => setQrSrc(null));
+  }, [product.qrToken]);
 
   function copyLink() {
+    if (!link) return;
     navigator.clipboard?.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
@@ -1696,17 +1702,21 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
     <Modal onClose={onClose} title="QR Code">
       <div className="flex flex-col items-center gap-4">
         <div className="rounded-2xl bg-white p-4">
-          <FakeQr seed={product.id} size={168} />
+          {qrSrc ? (
+            <img src={qrSrc} alt={`QR ${product.name}`} width={168} height={168} />
+          ) : (
+            <div className="flex h-[168px] w-[168px] items-center justify-center text-xs text-muted-foreground">…</div>
+          )}
         </div>
         <div className="text-center">
           <p className="text-[13px] font-medium">{product.name}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">{link}</p>
+          <p className="mt-1 break-all text-[11px] text-muted-foreground">{link}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <ModalBtn Icon={Download} label="Baixar QR" primary />
+          <ModalBtn Icon={Download} label="Baixar QR" primary onClick={() => product.qrToken && downloadQr(product.qrToken, `qr-${product.name}`)} />
           <ModalBtn Icon={Copy} label={copied ? "Copiado" : "Copiar link"} onClick={copyLink} />
-          <ModalBtn Icon={Printer} label="Imprimir etiqueta" />
-          <ModalBtn Icon={MessageCircle} label="WhatsApp" />
+          <ModalBtn Icon={Printer} label="Imprimir" onClick={() => window.print()} />
+          <ModalBtn Icon={MessageCircle} label="WhatsApp" onClick={() => link && window.open(`https://wa.me/?text=${encodeURIComponent(`Experimente: ${link}`)}`, "_blank")} />
         </div>
       </div>
     </Modal>
