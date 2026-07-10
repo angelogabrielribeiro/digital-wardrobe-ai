@@ -1,51 +1,72 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  Package,
-  QrCode,
-  BarChart3,
-  Store as StoreIcon,
-  ArrowLeft,
-  Upload,
-  FileSpreadsheet,
-  Sparkles,
-  ArrowRight,
-  Plus,
-  Search,
-  Download,
-  Copy,
-  Printer,
-  MessageCircle,
-  X,
-  TrendingUp,
-  Eye,
-  Bookmark,
-  ShoppingBag,
-  Instagram,
-  Globe,
-  MapPin,
-  Phone,
-  Check,
-  AlertTriangle,
-  ImageOff,
-  Lock,
-  Pencil,
-  Info,
+  LayoutDashboard, Package, QrCode, BarChart3, Store as StoreIcon,
+  ArrowLeft, Upload, FileSpreadsheet, Sparkles, ArrowRight, Plus, Search,
+  Download, Copy, Printer, MessageCircle, X, TrendingUp, Eye, Bookmark,
+  ShoppingBag, Instagram, Globe, MapPin, Phone, Check, AlertTriangle,
+  ImageOff, Lock, Pencil, Info, LogOut,
 } from "lucide-react";
 import {
-  MOCK_IMPORT_ROWS,
-  CATEGORY_LABEL,
-  
-  FORGOTTEN,
-  KPIS,
-  PRO_CATEGORIES,
-  WEEK_INSIGHTS,
-  MOCK_PRODUCTS,
-  type StudioProduct,
-  type StudioCategory,
-  type CatalogRow,
-} from "@/lib/studio-mock";
+  bulkCreateProducts, createProduct, deleteProduct, fetchInsights,
+  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
+  type Product, type ProductInput, type StoreProfile, type StudioCategory,
+} from "@/lib/db";
+import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
+import { uploadProductImage } from "@/lib/upload";
+import { parseCsv } from "@/lib/csv";
+import { signOut, useAuth } from "@/hooks/use-auth";
+
+const CATEGORY_LABEL: Record<StudioCategory, string> = {
+  superior: "Superior",
+  inferior: "Inferior",
+  "peca-unica": "Peça única",
+  calcados: "Calçados",
+  acessorios: "Acessórios",
+};
+const PRO_CATEGORIES: StudioCategory[] = ["calcados", "acessorios"];
+
+// Visual-layer product shape kept for compatibility with existing components.
+export type StudioProduct = {
+  id: string;
+  name: string;
+  category: StudioCategory;
+  price: number;
+  sku?: string;
+  image: string;
+  buyUrl?: string;
+  status: "pronto" | "revisar" | "sem-imagem";
+  stats: { views: number; tryons: number; saves: number; buyClicks: number };
+  qrToken?: string;
+};
+
+type CatalogRow = {
+  id: string;
+  name: string;
+  category: StudioCategory;
+  price: number;
+  sku?: string;
+  image?: string;
+  buyUrl?: string;
+  status: "pronto" | "revisar" | "sem-imagem";
+};
+
+function toStudioProduct(p: Product, tryons: number): StudioProduct {
+  return {
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    price: p.price,
+    sku: p.sku ?? undefined,
+    image: p.image,
+    buyUrl: p.buyUrl ?? undefined,
+    status: p.status,
+    stats: { views: tryons, tryons, saves: 0, buyClicks: 0 },
+    qrToken: p.qrToken,
+  };
+}
+
 
 export const Route = createFileRoute("/studio")({
   head: () => ({
