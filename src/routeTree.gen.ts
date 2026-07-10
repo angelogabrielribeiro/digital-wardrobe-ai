@@ -13,6 +13,7 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TryOnTokenRouteImport } from './routes/try-on.$token'
 
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
@@ -34,18 +35,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TryOnTokenRoute = TryOnTokenRouteImport.update({
+  id: '/try-on/$token',
+  path: '/try-on/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/studio': typeof StudioRoute
+  '/try-on/$token': typeof TryOnTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/studio': typeof StudioRoute
+  '/try-on/$token': typeof TryOnTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,20 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/studio': typeof StudioRoute
+  '/try-on/$token': typeof TryOnTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/reset-password' | '/studio'
+  fullPaths: '/' | '/auth' | '/reset-password' | '/studio' | '/try-on/$token'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/reset-password' | '/studio'
-  id: '__root__' | '/' | '/auth' | '/reset-password' | '/studio'
+  to: '/' | '/auth' | '/reset-password' | '/studio' | '/try-on/$token'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/studio'
+    | '/try-on/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +82,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   StudioRoute: typeof StudioRoute
+  TryOnTokenRoute: typeof TryOnTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/try-on/$token': {
+      id: '/try-on/$token'
+      path: '/try-on/$token'
+      fullPath: '/try-on/$token'
+      preLoaderRoute: typeof TryOnTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +130,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   StudioRoute: StudioRoute,
+  TryOnTokenRoute: TryOnTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
