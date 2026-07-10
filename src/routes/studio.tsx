@@ -105,9 +105,37 @@ export type StoreChannels = { fisica: boolean; ecommerce: boolean };
 
 /* ─────────────────────────── Root ─────────────────────────── */
 function StudioApp() {
+  const { session, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!authLoading && !session) navigate({ to: "/auth", replace: true });
+  }, [session, authLoading, navigate]);
+
+  const productsQuery = useQuery({
+    queryKey: ["products"],
+    queryFn: fetchMyProducts,
+    enabled: !!session,
+  });
+  const insightsQuery = useQuery({
+    queryKey: ["insights"],
+    queryFn: fetchInsights,
+    enabled: !!session,
+  });
+
+  const tryonsByProduct = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of insightsQuery.data?.perProduct ?? []) m.set(row.product_id, row.count);
+    return m;
+  }, [insightsQuery.data]);
+
+  const products: StudioProduct[] = useMemo(
+    () => (productsQuery.data ?? []).map((p) => toStudioProduct(p, tryonsByProduct.get(p.id) ?? 0)),
+    [productsQuery.data, tryonsByProduct],
+  );
+
   const [tab, setTab] = useState<Tab>("dashboard");
-  // Start empty so onboarding shows naturally on first run.
-  const [products, setProducts] = useState<StudioProduct[]>([]);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
@@ -118,44 +146,30 @@ function StudioApp() {
   const [interestedOpen, setInterestedOpen] = useState(false);
   const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
-  const showOnboarding = !onboardingDone && products.length === 0;
+  const showOnboarding = !onboardingDone && products.length === 0 && !productsQuery.isLoading;
 
-  function handleAddProduct(p: Omit<StudioProduct, "id" | "stats" | "status">) {
-    const newP: StudioProduct = {
-      ...p,
-      id: crypto.randomUUID(),
-      status: p.image ? "pronto" : "sem-imagem",
-      stats: { views: 0, tryons: 0, saves: 0, buyClicks: 0 },
-    };
-    setProducts((s) => [newP, ...s]);
+  async function handleAddProduct(input: ProductInput) {
+    await createProduct(input);
+    await Promise.all([qc.invalidateQueries({ queryKey: ["products"] }), qc.invalidateQueries({ queryKey: ["insights"] })]);
     setAddOpen(false);
   }
-
-  function handlePublishImport(rows: CatalogRow[]) {
-    const added: StudioProduct[] = rows.map((r, i) => ({
-      id: crypto.randomUUID(),
-      name: r.name,
-      category: r.category,
-      price: r.price,
-      sku: r.sku,
-      image: r.image ?? "",
-      buyUrl: r.buyUrl,
-      status: r.status,
-      stats: MOCK_PRODUCTS[i % MOCK_PRODUCTS.length]?.stats ?? {
-        views: 0,
-        tryons: 0,
-        saves: 0,
-        buyClicks: 0,
-      },
-    }));
-    setProducts((s) => [...added, ...s]);
+  async function handlePublishImport(rows: CatalogRow[]) {
+    await bulkCreateProducts(rows.map((r) => ({
+      name: r.name, category: r.category, price: r.price,
+      image: r.image, sku: r.sku, buyUrl: r.buyUrl,
+    })));
+    await qc.invalidateQueries({ queryKey: ["products"] });
     setImportOpen(false);
     setTab("produtos");
   }
 
+  if (authLoading || !session) {
+    return <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Carregando…</div>;
+  }
+
   return (
     <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
-      <StudioHeader />
+      <StudioHeader onLogout={async () => { await signOut(); qc.clear(); navigate({ to: "/auth", replace: true }); }} />
 
       <main className="flex-1">
         {showOnboarding ? (
@@ -167,35 +181,17 @@ function StudioApp() {
         ) : (
           <>
             {tab === "dashboard" && (
-              <Dashboard
-                products={products}
-                onImport={() => setImportOpen(true)}
-                onOpenInterested={() => setInterestedOpen(true)}
-              />
+              <Dashboard products={products} onImport={() => setImportOpen(true)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
             {tab === "produtos" && (
-              <Products
-                products={products}
-                onImport={() => setImportOpen(true)}
-                onAdd={() => setAddOpen(true)}
-                onOpen={(p) => setDetailProduct(p)}
-                onQr={(p) => setQrProduct(p)}
-              />
+              <Products products={products} onImport={() => setImportOpen(true)} onAdd={() => setAddOpen(true)}
+                onOpen={(p) => setDetailProduct(p)} onQr={(p) => setQrProduct(p)} />
             )}
             {tab === "publicacao" && (
-              <PublishPage
-                products={products}
-                channels={channels}
-                onQr={(p) => setQrProduct(p)}
-                onLink={(p) => setLinkProduct(p)}
-              />
+              <PublishPage products={products} channels={channels} onQr={(p) => setQrProduct(p)} onLink={(p) => setLinkProduct(p)} />
             )}
             {tab === "insights" && (
-              <Insights
-                products={products}
-                onPromote={(n) => setPromoteName(n)}
-                onOpenInterested={() => setInterestedOpen(true)}
-              />
+              <Insights products={products} onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
             {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
           </>
@@ -204,17 +200,17 @@ function StudioApp() {
 
       {!showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
-      {importOpen && (
-        <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
-      )}
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
       {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
           product={detailProduct}
           onClose={() => setDetailProduct(null)}
-          onQr={() => {
-            setQrProduct(detailProduct);
+          onQr={() => { setQrProduct(detailProduct); setDetailProduct(null); }}
+          onDelete={async () => {
+            await deleteProduct(detailProduct.id);
+            await qc.invalidateQueries({ queryKey: ["products"] });
             setDetailProduct(null);
           }}
         />
@@ -227,13 +223,10 @@ function StudioApp() {
 }
 
 /* ─────────────────────────── Header ─────────────────────────── */
-function StudioHeader() {
+function StudioHeader({ onLogout }: { onLogout: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[color:var(--border)] bg-background/80 px-5 py-3.5 backdrop-blur-xl">
-      <Link
-        to="/"
-        className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
+      <Link to="/" className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Modo Cliente
       </Link>
@@ -241,11 +234,9 @@ function StudioHeader() {
         <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={1.7} />
         <span className="text-[13px] font-medium tracking-tight">AuraFit Studio</span>
       </div>
-      <div className="w-[92px] text-right">
-        <span className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand">
-          Business
-        </span>
-      </div>
+      <button onClick={onLogout} className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Sair">
+        <LogOut className="h-3.5 w-3.5" strokeWidth={1.7} /> Sair
+      </button>
     </header>
   );
 }
