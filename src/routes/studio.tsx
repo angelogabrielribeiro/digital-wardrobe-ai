@@ -1726,7 +1726,7 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
 /* ─────────────────────────── Link modal ─────────────────────────── */
 function LinkModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const link = `https://aurafit.app/try/${product.id}`;
+  const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
 
   function copyLink() {
     navigator.clipboard?.writeText(link);
