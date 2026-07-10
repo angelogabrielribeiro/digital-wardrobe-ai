@@ -208,11 +208,6 @@ function StudioApp() {
           product={detailProduct}
           onClose={() => setDetailProduct(null)}
           onQr={() => { setQrProduct(detailProduct); setDetailProduct(null); }}
-          onDelete={async () => {
-            await deleteProduct(detailProduct.id);
-            await qc.invalidateQueries({ queryKey: ["products"] });
-            setDetailProduct(null);
-          }}
         />
       )}
       {addOpen && <AddProductModal onClose={() => setAddOpen(false)} onSave={handleAddProduct} />}
