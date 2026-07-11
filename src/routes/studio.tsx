@@ -1139,18 +1139,60 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
 
 /* ─────────────────────────── Store settings ─────────────────────────── */
 function StorePage({
-  channels,
-  onChannels,
+  store,
+  loading,
 }: {
-  channels: StoreChannels;
-  onChannels: (c: StoreChannels) => void;
+  store: StoreProfile | null;
+  loading: boolean;
 }) {
-  const [name, setName] = useState("Minha Loja");
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
   const [color, setColor] = useState("#6C63FF");
   const [wa, setWa] = useState("");
   const [ig, setIg] = useState("");
   const [site, setSite] = useState("");
   const [addr, setAddr] = useState("");
+  const [physical, setPhysical] = useState(true);
+  const [ecommerce, setEcommerce] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!store) return;
+    setName(store.nome ?? "");
+    setColor(store.cor ?? "#6C63FF");
+    setWa(store.whatsapp ?? "");
+    setIg(store.instagram ?? "");
+    setSite(store.website ?? "");
+    setAddr(store.endereco ?? "");
+    setPhysical(store.physical_enabled);
+    setEcommerce(store.ecommerce_enabled);
+  }, [store]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateMyStore({
+        nome: name.trim() || "Minha Loja",
+        cor: color,
+        whatsapp: wa.trim() || null,
+        instagram: ig.trim() || null,
+        website: site.trim() || null,
+        endereco: addr.trim() || null,
+        physical_enabled: physical,
+        ecommerce_enabled: ecommerce,
+      });
+      await qc.invalidateQueries({ queryKey: ["store"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1600);
+    } catch (e: any) {
+      setError(e?.message ?? "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
@@ -1163,24 +1205,27 @@ function StorePage({
         </h1>
       </header>
 
+      {loading && !store && (
+        <p className="text-center text-[12px] text-muted-foreground">Carregando…</p>
+      )}
+
       {/* Block: Canais */}
       <Block overline="Canais" title="Onde sua loja atende">
         <div className="glass flex flex-col divide-y divide-white/[0.06] rounded-2xl">
           <ChannelToggle
             label="Loja física"
             desc="Habilita QR Codes para vitrine, etiqueta e balcão."
-            checked={channels.fisica}
-            onChange={(v) => onChannels({ ...channels, fisica: v })}
+            checked={physical}
+            onChange={setPhysical}
           />
           <ChannelToggle
             label="Ecommerce"
             desc="Habilita link do provador para páginas de produto."
-            checked={channels.ecommerce}
-            onChange={(v) => onChannels({ ...channels, ecommerce: v })}
+            checked={ecommerce}
+            onChange={setEcommerce}
           />
         </div>
       </Block>
-
 
       {/* Block: Sua marca */}
       <Block overline="Bloco 1" title="Sua marca">
@@ -1193,7 +1238,7 @@ function StorePage({
               className="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold text-white"
               style={{ backgroundColor: color }}
             >
-              {name.charAt(0).toUpperCase()}
+              {(name || "M").charAt(0).toUpperCase()}
             </div>
             <div>
               <p className="text-[13.5px] font-semibold">{name || "Minha Loja"}</p>
@@ -1225,54 +1270,26 @@ function StorePage({
 
       {/* Block: Contato */}
       <Block overline="Bloco 2" title="Contato">
-        <Field
-          label="WhatsApp"
-          value={wa}
-          onChange={setWa}
-          placeholder="(11) 99999-9999"
-          Icon={Phone}
-        />
-        <Field
-          label="Instagram"
-          value={ig}
-          onChange={setIg}
-          placeholder="@sualoja"
-          Icon={Instagram}
-        />
-        <Field
-          label="Link do site"
-          value={site}
-          onChange={setSite}
-          placeholder="https://"
-          Icon={Globe}
-        />
+        <Field label="WhatsApp" value={wa} onChange={setWa} placeholder="(11) 99999-9999" Icon={Phone} />
+        <Field label="Instagram" value={ig} onChange={setIg} placeholder="@sualoja" Icon={Instagram} />
+        <Field label="Link do site" value={site} onChange={setSite} placeholder="https://" Icon={Globe} />
       </Block>
 
       {/* Block: Endereço */}
       <Block overline="Bloco 3" title="Endereço">
-        <Field
-          label="Endereço físico"
-          value={addr}
-          onChange={setAddr}
-          placeholder="Rua, número, cidade"
-          Icon={MapPin}
-        />
+        <Field label="Endereço físico" value={addr} onChange={setAddr} placeholder="Rua, número, cidade" Icon={MapPin} />
       </Block>
 
       {/* Block: Plano */}
       <Block overline="Bloco 4" title="Plano">
         <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
-              Atual
-            </p>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">Atual</p>
             <p className="mt-2 text-[13px] font-medium">Powered by AuraFit</p>
             <p className="mt-1 text-[11px] text-muted-foreground">Marca AuraFit visível</p>
           </div>
           <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">
-              White Label
-            </p>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">White Label</p>
             <ul className="mt-2 space-y-1 text-[11.5px] text-white/90">
               <li>Sua marca e logo</li>
               <li>Suas cores</li>
@@ -1282,8 +1299,17 @@ function StorePage({
         </div>
       </Block>
 
-      <button className="rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99]">
-        Salvar alterações
+      {error && (
+        <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-60"
+      >
+        {saving ? "Salvando…" : saved ? "Salvo" : "Salvar alterações"}
       </button>
     </div>
   );
