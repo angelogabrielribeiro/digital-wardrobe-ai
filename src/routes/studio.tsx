@@ -114,6 +114,11 @@ function StudioApp() {
     queryFn: fetchInsights,
     enabled: !!session,
   });
+  const storeQuery = useQuery({
+    queryKey: ["store"],
+    queryFn: fetchMyStore,
+    enabled: !!session,
+  });
 
   const tryonsByProduct = useMemo(() => {
     const m = new Map<string, number>();
