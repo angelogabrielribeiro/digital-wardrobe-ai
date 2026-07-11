@@ -1840,20 +1840,46 @@ function AddProductModal({
   const [image, setImage] = useState("");
   const [buyUrl, setBuyUrl] = useState("");
   const [sku, setSku] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const isPro = PRO_CATEGORIES.includes(category);
-  const valid = name.trim().length > 1 && Number(price) > 0 && !isPro;
+  const valid = name.trim().length > 1 && Number(price) > 0 && !isPro && !uploading && !saving;
 
-  function handleSubmit() {
+  async function handlePickFile(f: File) {
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(f);
+      setImage(url);
+    } catch (e: any) {
+      setUploadError(e?.message ?? "Falha no upload da imagem.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSubmit() {
     if (!valid) return;
-    onSave({
-      name: name.trim(),
-      price: Number(price),
-      category,
-      image: image.trim(),
-      buyUrl: buyUrl.trim() || undefined,
-      sku: sku.trim() || undefined,
-    });
+    setSubmitError(null);
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        price: Number(price),
+        category,
+        image: image.trim(),
+        buyUrl: buyUrl.trim() || undefined,
+        sku: sku.trim() || undefined,
+      } as any);
+    } catch (e: any) {
+      setSubmitError(e?.message ?? "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const cats: Array<{ key: StudioCategory; label: string; pro?: boolean }> = [
@@ -1868,7 +1894,53 @@ function AddProductModal({
     <Modal onClose={onClose} title="Novo produto">
       <div className="flex flex-col gap-3">
         <MField label="Nome do produto" value={name} onChange={setName} placeholder="Ex: Jaqueta Jeans" />
-        <MField label="Foto (URL)" value={image} onChange={setImage} placeholder="https://…" />
+
+        {/* Foto: upload + URL */}
+        <div className="glass rounded-2xl p-3.5">
+          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+            Foto do produto
+          </label>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
+              {image ? (
+                <img src={image} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] font-medium hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.7} />
+                {uploading ? "Enviando…" : image ? "Trocar foto" : "Enviar foto"}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handlePickFile(f);
+                }}
+              />
+            </div>
+          </div>
+          {uploadError && <p className="mt-2 text-[10.5px] text-red-300">{uploadError}</p>}
+          <input
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="ou cole uma URL de imagem"
+            className="mt-2 w-full rounded-lg bg-white/[0.03] px-3 py-2 text-[12px] outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+
         <div className="glass rounded-2xl p-3.5">
           <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
             Categoria
