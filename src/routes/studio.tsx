@@ -67,17 +67,8 @@ function toStudioProduct(p: Product, tryons: number): StudioProduct {
   };
 }
 
-// Compat stubs — real numbers vêm da UI condicional; ver Dashboard/Insights.
-const KPIS = { views: 0, looks: 0, triedProducts: 0, buyClicks: 0, estimatedSalesBRL: 0, intentRatePct: 0 };
-const MOCK_PRODUCTS: StudioProduct[] = [];
-const WEEK_INSIGHTS = {
-  topProduct: { name: "—", growthPct: 0 },
-  hotCategory: { name: "—", sharePct: 0 },
-  forgotten: { name: "—", tests: 0 },
-  recommendation: "Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes para começar a coletar experimentações.",
-};
-const FORGOTTEN: Array<{ name: string; tests: number }> = [];
-const MOCK_IMPORT_ROWS: CatalogRow[] = [];
+// Sem dados mockados — estados vazios até existirem dados reais.
+
 
 
 export const Route = createFileRoute("/studio")({
