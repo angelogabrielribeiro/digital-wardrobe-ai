@@ -67,17 +67,8 @@ function toStudioProduct(p: Product, tryons: number): StudioProduct {
   };
 }
 
-// Compat stubs — real numbers vêm da UI condicional; ver Dashboard/Insights.
-const KPIS = { views: 0, looks: 0, triedProducts: 0, buyClicks: 0, estimatedSalesBRL: 0, intentRatePct: 0 };
-const MOCK_PRODUCTS: StudioProduct[] = [];
-const WEEK_INSIGHTS = {
-  topProduct: { name: "—", growthPct: 0 },
-  hotCategory: { name: "—", sharePct: 0 },
-  forgotten: { name: "—", tests: 0 },
-  recommendation: "Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes para começar a coletar experimentações.",
-};
-const FORGOTTEN: Array<{ name: string; tests: number }> = [];
-const MOCK_IMPORT_ROWS: CatalogRow[] = [];
+// Sem dados mockados — estados vazios até existirem dados reais.
+
 
 
 export const Route = createFileRoute("/studio")({
@@ -123,6 +114,11 @@ function StudioApp() {
     queryFn: fetchInsights,
     enabled: !!session,
   });
+  const storeQuery = useQuery({
+    queryKey: ["store"],
+    queryFn: fetchMyStore,
+    enabled: !!session,
+  });
 
   const tryonsByProduct = useMemo(() => {
     const m = new Map<string, number>();
@@ -136,7 +132,7 @@ function StudioApp() {
   );
 
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [onboardingDone, setOnboardingDone] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
   const [linkProduct, setLinkProduct] = useState<StudioProduct | null>(null);
@@ -144,9 +140,16 @@ function StudioApp() {
   const [addOpen, setAddOpen] = useState(false);
   const [promoteName, setPromoteName] = useState<string | null>(null);
   const [interestedOpen, setInterestedOpen] = useState(false);
-  const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
-  const showOnboarding = !onboardingDone && products.length === 0 && !productsQuery.isLoading;
+  const store = storeQuery.data ?? null;
+  const channels: StoreChannels = {
+    fisica: store?.physical_enabled ?? true,
+    ecommerce: store?.ecommerce_enabled ?? true,
+  };
+
+  // Onboarding só aparece enquanto não houver produtos publicados.
+  const showOnboarding =
+    !onboardingDismissed && products.length === 0 && !productsQuery.isLoading;
 
   async function handleAddProduct(input: ProductInput) {
     await createProduct(input);
@@ -175,7 +178,7 @@ function StudioApp() {
         {showOnboarding ? (
           <Onboarding
             onImport={() => setImportOpen(true)}
-            onFinish={() => setOnboardingDone(true)}
+            onFinish={() => setOnboardingDismissed(true)}
             hasProducts={products.length > 0}
           />
         ) : (
@@ -193,7 +196,7 @@ function StudioApp() {
             {tab === "insights" && (
               <Insights products={products} onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
-            {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
+            {tab === "loja" && <StorePage store={store} loading={storeQuery.isLoading} />}
           </>
         )}
       </main>
@@ -362,11 +365,10 @@ function Dashboard({
   onImport: () => void;
   onOpenInterested: () => void;
 }) {
-  const tried = products.reduce((n, p) => n + p.stats.tryons, 0) || KPIS.triedProducts;
-  const buys = products.reduce((n, p) => n + p.stats.buyClicks, 0) || KPIS.buyClicks;
-  const est = buys > 0
-    ? products.reduce((n, p) => n + p.stats.buyClicks * p.price, 0) || KPIS.estimatedSalesBRL
-    : 0;
+  const tried = products.reduce((n, p) => n + p.stats.tryons, 0);
+  const buys = products.reduce((n, p) => n + p.stats.buyClicks, 0);
+  const est = buys > 0 ? products.reduce((n, p) => n + p.stats.buyClicks * p.price, 0) : 0;
+  const hasData = tried > 0 || buys > 0;
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-8 fade-in">
@@ -434,17 +436,28 @@ function Dashboard({
           </p>
           <span className="text-[10px] text-brand">Hoje</span>
         </div>
-        <p className="mt-3 text-[15px] leading-snug">
-          <span className="font-semibold">57 pessoas</span> experimentaram uma peça hoje.<br />
-          <span className="text-muted-foreground">19 saíram sem clicar em comprar.</span>
-        </p>
-        <button
-          onClick={onOpenInterested}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
-        >
-          Criar mensagem de retorno
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
+        {hasData ? (
+          <>
+            <p className="mt-3 text-[15px] leading-snug">
+              <span className="font-semibold">{tried.toLocaleString("pt-BR")}</span>{" "}
+              {tried === 1 ? "pessoa experimentou" : "pessoas experimentaram"} uma peça.<br />
+              <span className="text-muted-foreground">
+                {Math.max(0, tried - buys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
+              </span>
+            </p>
+            <button
+              onClick={onOpenInterested}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
+            >
+              Criar mensagem de retorno
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          </>
+        ) : (
+          <p className="mt-3 text-[12.5px] leading-snug text-muted-foreground">
+            Ainda não há dados suficientes. Publique seus primeiros produtos e compartilhe seus QR Codes ou links para começar a acompanhar as experimentações.
+          </p>
+        )}
       </section>
 
       <p className="pb-4 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
@@ -933,7 +946,12 @@ function Insights({
   onPromote: (name: string) => void;
   onOpenInterested: () => void;
 }) {
-  const topThree = (products.length > 0 ? products : MOCK_PRODUCTS).slice(0, 3);
+  const topThree = [...products].sort((a, b) => b.stats.tryons - a.stats.tryons).slice(0, 3);
+  const totalTry = products.reduce((n, p) => n + p.stats.tryons, 0);
+  const totalBuys = products.reduce((n, p) => n + p.stats.buyClicks, 0);
+  const withTry = topThree.filter((p) => p.stats.tryons > 0);
+  const forgotten = products.filter((p) => p.stats.tryons === 0).slice(0, 3);
+  const hasData = totalTry > 0;
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
@@ -946,88 +964,74 @@ function Insights({
         </h1>
       </header>
 
-      {/* 1. Week resume */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Resumo" title="Resumo semanal" />
-        <div className="grid grid-cols-2 gap-2.5">
-          <MiniInsight
-            label="Mais experimentado"
-            value={WEEK_INSIGHTS.topProduct.name}
-            tag={`+${WEEK_INSIGHTS.topProduct.growthPct}%`}
-            tone="up"
-          />
-          <MiniInsight
-            label="Categoria em alta"
-            value={WEEK_INSIGHTS.hotCategory.name}
-            tag={`${WEEK_INSIGHTS.hotCategory.sharePct}%`}
-          />
-        </div>
-        <div className="glass rounded-2xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
-          <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Recomendação</p>
-          <p className="mt-2 text-[12.5px] leading-snug text-white/90">
-            {WEEK_INSIGHTS.recommendation}
+      {!hasData ? (
+        <div className="glass rounded-3xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-5">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Sem dados ainda</p>
+          <p className="mt-2 text-[13px] leading-snug text-white/90">
+            Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes ou links para começar.
           </p>
         </div>
-      </section>
+      ) : (
+        <>
+          {/* Funil dos produtos mais experimentados */}
+          <section className="flex flex-col gap-3">
+            <SectionTitle overline="Desempenho" title="Mais experimentados" />
+            {withTry.map((p) => (
+              <ProductFunnel key={p.id} product={p} />
+            ))}
+          </section>
 
-      {/* 2. Product funnel */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Desempenho" title="Funil dos produtos" />
-        {topThree.map((p) => (
-          <ProductFunnel key={p.id} product={p} />
-        ))}
-      </section>
-
-
-      {/* 4. Forgotten */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle
-          overline="Atenção"
-          title="Produtos esquecidos"
-          desc="Pouca ou nenhuma experimentação."
-        />
-        <div className="flex flex-col gap-2">
-          {FORGOTTEN.map((f) => (
-            <div
-              key={f.name}
-              className="glass flex items-center justify-between rounded-2xl p-4"
-            >
-              <div>
-                <p className="text-[13px] font-medium">{f.name}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {f.tests} {f.tests === 1 ? "teste" : "testes"} nos últimos 7 dias
-                </p>
+          {/* Produtos esquecidos */}
+          {forgotten.length > 0 && (
+            <section className="flex flex-col gap-3">
+              <SectionTitle
+                overline="Atenção"
+                title="Produtos esquecidos"
+                desc="Ainda sem experimentações."
+              />
+              <div className="flex flex-col gap-2">
+                {forgotten.map((p) => (
+                  <div key={p.id} className="glass flex items-center justify-between rounded-2xl p-4">
+                    <div>
+                      <p className="text-[13px] font-medium">{p.name}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Nenhuma experimentação até agora
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onPromote(p.name)}
+                      className="rounded-full bg-brand/15 px-3 py-1.5 text-[11.5px] font-medium text-brand hover:bg-brand/25"
+                    >
+                      Promover
+                    </button>
+                  </div>
+                ))}
               </div>
+            </section>
+          )}
+
+          {/* Clientes interessados */}
+          <section className="flex flex-col gap-3">
+            <SectionTitle overline="Retorno" title="Clientes interessados" />
+            <div className="glass rounded-3xl p-5">
+              <p className="text-[14px] leading-snug">
+                <span className="font-semibold">{totalTry.toLocaleString("pt-BR")}</span>{" "}
+                {totalTry === 1 ? "pessoa experimentou" : "pessoas experimentaram"} nos últimos dias.
+              </p>
+              <p className="text-[12.5px] text-muted-foreground">
+                {Math.max(0, totalTry - totalBuys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
+              </p>
               <button
-                onClick={() => onPromote(f.name)}
-                className="rounded-full bg-brand/15 px-3 py-1.5 text-[11.5px] font-medium text-brand hover:bg-brand/25"
+                onClick={onOpenInterested}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
               >
-                Promover
+                Criar mensagem de retorno
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
               </button>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 5. Interested customers + 6. return message */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Retorno" title="Clientes interessados" />
-        <div className="glass rounded-3xl p-5">
-          <p className="text-[14px] leading-snug">
-            <span className="font-semibold">57 pessoas</span> experimentaram esta semana.
-          </p>
-          <p className="text-[12.5px] text-muted-foreground">
-            19 saíram sem clicar em comprar.
-          </p>
-          <button
-            onClick={onOpenInterested}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
-          >
-            Criar mensagem de retorno
-            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </div>
-      </section>
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -1135,18 +1139,60 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
 
 /* ─────────────────────────── Store settings ─────────────────────────── */
 function StorePage({
-  channels,
-  onChannels,
+  store,
+  loading,
 }: {
-  channels: StoreChannels;
-  onChannels: (c: StoreChannels) => void;
+  store: StoreProfile | null;
+  loading: boolean;
 }) {
-  const [name, setName] = useState("Minha Loja");
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
   const [color, setColor] = useState("#6C63FF");
   const [wa, setWa] = useState("");
   const [ig, setIg] = useState("");
   const [site, setSite] = useState("");
   const [addr, setAddr] = useState("");
+  const [physical, setPhysical] = useState(true);
+  const [ecommerce, setEcommerce] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!store) return;
+    setName(store.nome ?? "");
+    setColor(store.cor ?? "#6C63FF");
+    setWa(store.whatsapp ?? "");
+    setIg(store.instagram ?? "");
+    setSite(store.website ?? "");
+    setAddr(store.endereco ?? "");
+    setPhysical(store.physical_enabled);
+    setEcommerce(store.ecommerce_enabled);
+  }, [store]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateMyStore({
+        nome: name.trim() || "Minha Loja",
+        cor: color,
+        whatsapp: wa.trim() || null,
+        instagram: ig.trim() || null,
+        website: site.trim() || null,
+        endereco: addr.trim() || null,
+        physical_enabled: physical,
+        ecommerce_enabled: ecommerce,
+      });
+      await qc.invalidateQueries({ queryKey: ["store"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1600);
+    } catch (e: any) {
+      setError(e?.message ?? "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
@@ -1159,24 +1205,27 @@ function StorePage({
         </h1>
       </header>
 
+      {loading && !store && (
+        <p className="text-center text-[12px] text-muted-foreground">Carregando…</p>
+      )}
+
       {/* Block: Canais */}
       <Block overline="Canais" title="Onde sua loja atende">
         <div className="glass flex flex-col divide-y divide-white/[0.06] rounded-2xl">
           <ChannelToggle
             label="Loja física"
             desc="Habilita QR Codes para vitrine, etiqueta e balcão."
-            checked={channels.fisica}
-            onChange={(v) => onChannels({ ...channels, fisica: v })}
+            checked={physical}
+            onChange={setPhysical}
           />
           <ChannelToggle
             label="Ecommerce"
             desc="Habilita link do provador para páginas de produto."
-            checked={channels.ecommerce}
-            onChange={(v) => onChannels({ ...channels, ecommerce: v })}
+            checked={ecommerce}
+            onChange={setEcommerce}
           />
         </div>
       </Block>
-
 
       {/* Block: Sua marca */}
       <Block overline="Bloco 1" title="Sua marca">
@@ -1189,7 +1238,7 @@ function StorePage({
               className="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold text-white"
               style={{ backgroundColor: color }}
             >
-              {name.charAt(0).toUpperCase()}
+              {(name || "M").charAt(0).toUpperCase()}
             </div>
             <div>
               <p className="text-[13.5px] font-semibold">{name || "Minha Loja"}</p>
@@ -1221,54 +1270,26 @@ function StorePage({
 
       {/* Block: Contato */}
       <Block overline="Bloco 2" title="Contato">
-        <Field
-          label="WhatsApp"
-          value={wa}
-          onChange={setWa}
-          placeholder="(11) 99999-9999"
-          Icon={Phone}
-        />
-        <Field
-          label="Instagram"
-          value={ig}
-          onChange={setIg}
-          placeholder="@sualoja"
-          Icon={Instagram}
-        />
-        <Field
-          label="Link do site"
-          value={site}
-          onChange={setSite}
-          placeholder="https://"
-          Icon={Globe}
-        />
+        <Field label="WhatsApp" value={wa} onChange={setWa} placeholder="(11) 99999-9999" Icon={Phone} />
+        <Field label="Instagram" value={ig} onChange={setIg} placeholder="@sualoja" Icon={Instagram} />
+        <Field label="Link do site" value={site} onChange={setSite} placeholder="https://" Icon={Globe} />
       </Block>
 
       {/* Block: Endereço */}
       <Block overline="Bloco 3" title="Endereço">
-        <Field
-          label="Endereço físico"
-          value={addr}
-          onChange={setAddr}
-          placeholder="Rua, número, cidade"
-          Icon={MapPin}
-        />
+        <Field label="Endereço físico" value={addr} onChange={setAddr} placeholder="Rua, número, cidade" Icon={MapPin} />
       </Block>
 
       {/* Block: Plano */}
       <Block overline="Bloco 4" title="Plano">
         <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
-              Atual
-            </p>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">Atual</p>
             <p className="mt-2 text-[13px] font-medium">Powered by AuraFit</p>
             <p className="mt-1 text-[11px] text-muted-foreground">Marca AuraFit visível</p>
           </div>
           <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
-            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">
-              White Label
-            </p>
+            <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">White Label</p>
             <ul className="mt-2 space-y-1 text-[11.5px] text-white/90">
               <li>Sua marca e logo</li>
               <li>Suas cores</li>
@@ -1278,8 +1299,17 @@ function StorePage({
         </div>
       </Block>
 
-      <button className="rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99]">
-        Salvar alterações
+      {error && (
+        <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-60"
+      >
+        {saving ? "Salvando…" : saved ? "Salvo" : "Salvar alterações"}
       </button>
     </div>
   );
@@ -1422,42 +1452,53 @@ function ImportModal({
 }) {
   const [step, setStep] = useState<ImportStep>("upload");
   const [progress, setProgress] = useState(0);
-  const [rows, setRows] = useState<CatalogRow[]>(MOCK_IMPORT_ROWS);
+  const [rows, setRows] = useState<CatalogRow[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Issue summary detected from mock rows
   const issues = useMemo(() => {
     const noImage = rows.filter((r) => r.status === "sem-imagem").length;
     const badPrice = rows.filter((r) => !(r.price > 0)).length;
-    const unknownCat = 0; // mock rows have valid categories
-    return { noImage, badPrice, unknownCat };
+    return { noImage, badPrice, unknownCat: 0 };
   }, [rows]);
 
-  function beginAnalysis(_name: string) {
+  async function beginAnalysis(file: File) {
+    setFileError(null);
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".csv")) {
+      setFileError("Por enquanto aceitamos apenas arquivos .csv. Excel em breve.");
+      return;
+    }
     setStep("analyzing");
     setProgress(0);
-    const stages = [
-      { label: "Analisando planilha…", ms: 700 },
-      { label: "Identificando produtos…", ms: 900 },
-      { label: "Organizando catálogo…", ms: 800 },
-    ];
-    let i = 0;
-    const next = () => {
-      if (i >= stages.length) {
-        // If there are issues, show summary. Otherwise go straight to review.
-        const hasIssues =
-          rows.some((r) => r.status !== "pronto") || rows.some((r) => !(r.price > 0));
-        setStep(hasIssues ? "issues" : "review");
-        return;
-      }
-      setProgress(i);
-      setTimeout(() => {
-        i += 1;
-        next();
-      }, stages[i].ms);
-    };
-    next();
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      const catalog: CatalogRow[] = parsed.map((p, idx) => ({
+        id: `row-${idx}-${Date.now()}`,
+        name: p.name,
+        category: p.category,
+        price: p.price,
+        sku: p.sku,
+        image: p.image,
+        buyUrl: p.buyUrl,
+        status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
+      }));
+      setRows(catalog);
+      // pequena animação de feedback
+      setProgress(1);
+      await new Promise((r) => setTimeout(r, 400));
+      setProgress(2);
+      await new Promise((r) => setTimeout(r, 300));
+      const hasIssues = catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
+      setStep(catalog.length === 0 ? "upload" : hasIssues ? "issues" : "review");
+      if (catalog.length === 0) setFileError("Nenhum produto encontrado no arquivo.");
+    } catch (err) {
+      console.error(err);
+      setFileError("Não conseguimos ler este arquivo.");
+      setStep("upload");
+    }
   }
 
   return (
@@ -1478,7 +1519,7 @@ function ImportModal({
               e.preventDefault();
               setDragOver(false);
               const f = e.dataTransfer.files?.[0];
-              if (f) beginAnalysis(f.name);
+              if (f) beginAnalysis(f);
             }}
             className={`glass flex flex-col items-center justify-center gap-3 rounded-3xl border-dashed py-12 transition-all ${
               dragOver ? "border-brand/60 bg-brand/[0.06]" : "hover:border-white/[0.14]"
@@ -1493,31 +1534,34 @@ function ImportModal({
             </div>
             <div className="flex gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
-                Excel
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
                 CSV
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground opacity-60">
+                Excel em breve
               </span>
             </div>
           </button>
           <input
             ref={fileRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".csv,text/csv"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) beginAnalysis(f.name);
+              if (f) beginAnalysis(f);
             }}
           />
-          <button
-            onClick={() => beginAnalysis("exemplo.xlsx")}
-            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={1.7} /> Usar planilha de exemplo
-          </button>
+          {fileError && (
+            <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+              {fileError}
+            </p>
+          )}
+          <p className="text-center text-[10.5px] text-muted-foreground">
+            Cabeçalhos aceitos: nome, categoria, preco, descricao, imagem, sku, buy_url
+          </p>
         </div>
       )}
+
 
       {step === "analyzing" && (
         <div className="flex flex-col items-center gap-4 py-8">
@@ -1796,20 +1840,46 @@ function AddProductModal({
   const [image, setImage] = useState("");
   const [buyUrl, setBuyUrl] = useState("");
   const [sku, setSku] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const isPro = PRO_CATEGORIES.includes(category);
-  const valid = name.trim().length > 1 && Number(price) > 0 && !isPro;
+  const valid = name.trim().length > 1 && Number(price) > 0 && !isPro && !uploading && !saving;
 
-  function handleSubmit() {
+  async function handlePickFile(f: File) {
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(f);
+      setImage(url);
+    } catch (e: any) {
+      setUploadError(e?.message ?? "Falha no upload da imagem.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSubmit() {
     if (!valid) return;
-    onSave({
-      name: name.trim(),
-      price: Number(price),
-      category,
-      image: image.trim(),
-      buyUrl: buyUrl.trim() || undefined,
-      sku: sku.trim() || undefined,
-    });
+    setSubmitError(null);
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        price: Number(price),
+        category,
+        image: image.trim(),
+        buyUrl: buyUrl.trim() || undefined,
+        sku: sku.trim() || undefined,
+      } as any);
+    } catch (e: any) {
+      setSubmitError(e?.message ?? "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const cats: Array<{ key: StudioCategory; label: string; pro?: boolean }> = [
@@ -1824,7 +1894,53 @@ function AddProductModal({
     <Modal onClose={onClose} title="Novo produto">
       <div className="flex flex-col gap-3">
         <MField label="Nome do produto" value={name} onChange={setName} placeholder="Ex: Jaqueta Jeans" />
-        <MField label="Foto (URL)" value={image} onChange={setImage} placeholder="https://…" />
+
+        {/* Foto: upload + URL */}
+        <div className="glass rounded-2xl p-3.5">
+          <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
+            Foto do produto
+          </label>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
+              {image ? (
+                <img src={image} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] font-medium hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.7} />
+                {uploading ? "Enviando…" : image ? "Trocar foto" : "Enviar foto"}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handlePickFile(f);
+                }}
+              />
+            </div>
+          </div>
+          {uploadError && <p className="mt-2 text-[10.5px] text-red-300">{uploadError}</p>}
+          <input
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="ou cole uma URL de imagem"
+            className="mt-2 w-full rounded-lg bg-white/[0.03] px-3 py-2 text-[12px] outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+
         <div className="glass rounded-2xl p-3.5">
           <label className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
             Categoria
@@ -1857,12 +1973,17 @@ function AddProductModal({
         <MField label="Preço" value={price} onChange={setPrice} placeholder="0,00" type="number" />
         <MField label="Link de compra" value={buyUrl} onChange={setBuyUrl} placeholder="https://" />
         <MField label="SKU (opcional)" value={sku} onChange={setSku} placeholder="SKU-001" />
+        {submitError && (
+          <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+            {submitError}
+          </p>
+        )}
         <button
           onClick={handleSubmit}
           disabled={!valid}
           className="mt-2 rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-40"
         >
-          Salvar produto
+          {saving ? "Salvando…" : "Salvar produto"}
         </button>
       </div>
     </Modal>

@@ -144,12 +144,14 @@ export type Database = {
         Row: {
           cor: string
           created_at: string
+          ecommerce_enabled: boolean
           endereco: string | null
           id: string
           instagram: string | null
           logo: string | null
           nome: string
           owner_id: string
+          physical_enabled: boolean
           updated_at: string
           website: string | null
           whatsapp: string | null
@@ -157,12 +159,14 @@ export type Database = {
         Insert: {
           cor?: string
           created_at?: string
+          ecommerce_enabled?: boolean
           endereco?: string | null
           id?: string
           instagram?: string | null
           logo?: string | null
           nome?: string
           owner_id: string
+          physical_enabled?: boolean
           updated_at?: string
           website?: string | null
           whatsapp?: string | null
@@ -170,12 +174,14 @@ export type Database = {
         Update: {
           cor?: string
           created_at?: string
+          ecommerce_enabled?: boolean
           endereco?: string | null
           id?: string
           instagram?: string | null
           logo?: string | null
           nome?: string
           owner_id?: string
+          physical_enabled?: boolean
           updated_at?: string
           website?: string | null
           whatsapp?: string | null
@@ -188,6 +194,24 @@ export type Database = {
     }
     Functions: {
       current_store_id: { Args: never; Returns: string }
+      get_product_by_token: {
+        Args: { _token: string }
+        Returns: {
+          buy_url: string
+          categoria: string
+          created_at: string
+          descricao: string
+          id: string
+          imagem: string
+          nome: string
+          preco: number
+          sku: string
+          status: string
+          store_id: string
+          updated_at: string
+        }[]
+      }
+      log_experiment_by_token: { Args: { _token: string }; Returns: undefined }
       owns_product: { Args: { _product_id: string }; Returns: boolean }
     }
     Enums: {

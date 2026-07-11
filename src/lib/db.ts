@@ -33,6 +33,8 @@ export type StoreProfile = {
   endereco: string | null;
   cor: string;
   logo: string | null;
+  physical_enabled: boolean;
+  ecommerce_enabled: boolean;
 };
 
 function normalizeCategory(v: string | null | undefined): StudioCategory {
@@ -81,6 +83,8 @@ export async function updateMyStore(patch: Partial<StoreProfile>): Promise<Store
       endereco: patch.endereco,
       cor: patch.cor,
       logo: patch.logo,
+      physical_enabled: patch.physical_enabled,
+      ecommerce_enabled: patch.ecommerce_enabled,
     })
     .eq("id", existing.id)
     .select()
@@ -229,25 +233,16 @@ export async function fetchInsights(): Promise<Insights> {
   };
 }
 
-/* ---------- Public try-on ---------- */
+/* ---------- Public try-on (via RPC — não expõe qrcodes) ---------- */
 export async function fetchProductByToken(token: string): Promise<Product | null> {
-  const { data: qr, error: qErr } = await supabase
-    .from("qrcodes")
-    .select("product_id")
-    .eq("token", token)
-    .maybeSingle();
-  if (qErr) throw qErr;
-  if (!qr) return null;
-  const { data: p, error: pErr } = await supabase
-    .from("products")
-    .select("*")
-    .eq("id", qr.product_id)
-    .maybeSingle();
-  if (pErr) throw pErr;
-  return p ? mapProduct(p as ProductRow, token) : null;
+  const { data, error } = await supabase.rpc("get_product_by_token", { _token: token });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapProduct(row as ProductRow, token) : null;
 }
 
-export async function logExperiment(product_id: string): Promise<void> {
-  const { error } = await supabase.from("experiments").insert({ product_id });
+export async function logExperimentByToken(token: string): Promise<void> {
+  const { error } = await supabase.rpc("log_experiment_by_token", { _token: token });
   if (error) throw error;
 }
+
