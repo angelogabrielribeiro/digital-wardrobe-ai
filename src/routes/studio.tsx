@@ -353,11 +353,10 @@ function Dashboard({
   onImport: () => void;
   onOpenInterested: () => void;
 }) {
-  const tried = products.reduce((n, p) => n + p.stats.tryons, 0) || KPIS.triedProducts;
-  const buys = products.reduce((n, p) => n + p.stats.buyClicks, 0) || KPIS.buyClicks;
-  const est = buys > 0
-    ? products.reduce((n, p) => n + p.stats.buyClicks * p.price, 0) || KPIS.estimatedSalesBRL
-    : 0;
+  const tried = products.reduce((n, p) => n + p.stats.tryons, 0);
+  const buys = products.reduce((n, p) => n + p.stats.buyClicks, 0);
+  const est = buys > 0 ? products.reduce((n, p) => n + p.stats.buyClicks * p.price, 0) : 0;
+  const hasData = tried > 0 || buys > 0;
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-8 fade-in">
