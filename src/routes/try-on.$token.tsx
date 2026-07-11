@@ -31,7 +31,7 @@ function TryOnPage() {
   useEffect(() => {
     if (product && !logged.current) {
       logged.current = true;
-      logExperiment(product.id).catch(() => {});
+      logExperimentByToken(token).catch(() => {});
     }
   }, [product]);
 
