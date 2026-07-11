@@ -934,7 +934,12 @@ function Insights({
   onPromote: (name: string) => void;
   onOpenInterested: () => void;
 }) {
-  const topThree = (products.length > 0 ? products : MOCK_PRODUCTS).slice(0, 3);
+  const topThree = [...products].sort((a, b) => b.stats.tryons - a.stats.tryons).slice(0, 3);
+  const totalTry = products.reduce((n, p) => n + p.stats.tryons, 0);
+  const totalBuys = products.reduce((n, p) => n + p.stats.buyClicks, 0);
+  const withTry = topThree.filter((p) => p.stats.tryons > 0);
+  const forgotten = products.filter((p) => p.stats.tryons === 0).slice(0, 3);
+  const hasData = totalTry > 0;
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
@@ -947,88 +952,74 @@ function Insights({
         </h1>
       </header>
 
-      {/* 1. Week resume */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Resumo" title="Resumo semanal" />
-        <div className="grid grid-cols-2 gap-2.5">
-          <MiniInsight
-            label="Mais experimentado"
-            value={WEEK_INSIGHTS.topProduct.name}
-            tag={`+${WEEK_INSIGHTS.topProduct.growthPct}%`}
-            tone="up"
-          />
-          <MiniInsight
-            label="Categoria em alta"
-            value={WEEK_INSIGHTS.hotCategory.name}
-            tag={`${WEEK_INSIGHTS.hotCategory.sharePct}%`}
-          />
-        </div>
-        <div className="glass rounded-2xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
-          <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Recomendação</p>
-          <p className="mt-2 text-[12.5px] leading-snug text-white/90">
-            {WEEK_INSIGHTS.recommendation}
+      {!hasData ? (
+        <div className="glass rounded-3xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-5">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Sem dados ainda</p>
+          <p className="mt-2 text-[13px] leading-snug text-white/90">
+            Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes ou links para começar.
           </p>
         </div>
-      </section>
+      ) : (
+        <>
+          {/* Funil dos produtos mais experimentados */}
+          <section className="flex flex-col gap-3">
+            <SectionTitle overline="Desempenho" title="Mais experimentados" />
+            {withTry.map((p) => (
+              <ProductFunnel key={p.id} product={p} />
+            ))}
+          </section>
 
-      {/* 2. Product funnel */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Desempenho" title="Funil dos produtos" />
-        {topThree.map((p) => (
-          <ProductFunnel key={p.id} product={p} />
-        ))}
-      </section>
-
-
-      {/* 4. Forgotten */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle
-          overline="Atenção"
-          title="Produtos esquecidos"
-          desc="Pouca ou nenhuma experimentação."
-        />
-        <div className="flex flex-col gap-2">
-          {FORGOTTEN.map((f) => (
-            <div
-              key={f.name}
-              className="glass flex items-center justify-between rounded-2xl p-4"
-            >
-              <div>
-                <p className="text-[13px] font-medium">{f.name}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {f.tests} {f.tests === 1 ? "teste" : "testes"} nos últimos 7 dias
-                </p>
+          {/* Produtos esquecidos */}
+          {forgotten.length > 0 && (
+            <section className="flex flex-col gap-3">
+              <SectionTitle
+                overline="Atenção"
+                title="Produtos esquecidos"
+                desc="Ainda sem experimentações."
+              />
+              <div className="flex flex-col gap-2">
+                {forgotten.map((p) => (
+                  <div key={p.id} className="glass flex items-center justify-between rounded-2xl p-4">
+                    <div>
+                      <p className="text-[13px] font-medium">{p.name}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Nenhuma experimentação até agora
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onPromote(p.name)}
+                      className="rounded-full bg-brand/15 px-3 py-1.5 text-[11.5px] font-medium text-brand hover:bg-brand/25"
+                    >
+                      Promover
+                    </button>
+                  </div>
+                ))}
               </div>
+            </section>
+          )}
+
+          {/* Clientes interessados */}
+          <section className="flex flex-col gap-3">
+            <SectionTitle overline="Retorno" title="Clientes interessados" />
+            <div className="glass rounded-3xl p-5">
+              <p className="text-[14px] leading-snug">
+                <span className="font-semibold">{totalTry.toLocaleString("pt-BR")}</span>{" "}
+                {totalTry === 1 ? "pessoa experimentou" : "pessoas experimentaram"} nos últimos dias.
+              </p>
+              <p className="text-[12.5px] text-muted-foreground">
+                {Math.max(0, totalTry - totalBuys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
+              </p>
               <button
-                onClick={() => onPromote(f.name)}
-                className="rounded-full bg-brand/15 px-3 py-1.5 text-[11.5px] font-medium text-brand hover:bg-brand/25"
+                onClick={onOpenInterested}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
               >
-                Promover
+                Criar mensagem de retorno
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
               </button>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 5. Interested customers + 6. return message */}
-      <section className="flex flex-col gap-3">
-        <SectionTitle overline="Retorno" title="Clientes interessados" />
-        <div className="glass rounded-3xl p-5">
-          <p className="text-[14px] leading-snug">
-            <span className="font-semibold">57 pessoas</span> experimentaram esta semana.
-          </p>
-          <p className="text-[12.5px] text-muted-foreground">
-            19 saíram sem clicar em comprar.
-          </p>
-          <button
-            onClick={onOpenInterested}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white active:scale-[0.98]"
-          >
-            Criar mensagem de retorno
-            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </div>
-      </section>
+          </section>
+        </>
+      )}
     </div>
   );
 }
