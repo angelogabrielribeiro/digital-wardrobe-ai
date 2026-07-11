@@ -424,17 +424,28 @@ function Dashboard({
           </p>
           <span className="text-[10px] text-brand">Hoje</span>
         </div>
-        <p className="mt-3 text-[15px] leading-snug">
-          <span className="font-semibold">57 pessoas</span> experimentaram uma peça hoje.<br />
-          <span className="text-muted-foreground">19 saíram sem clicar em comprar.</span>
-        </p>
-        <button
-          onClick={onOpenInterested}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
-        >
-          Criar mensagem de retorno
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
+        {hasData ? (
+          <>
+            <p className="mt-3 text-[15px] leading-snug">
+              <span className="font-semibold">{tried.toLocaleString("pt-BR")}</span>{" "}
+              {tried === 1 ? "pessoa experimentou" : "pessoas experimentaram"} uma peça.<br />
+              <span className="text-muted-foreground">
+                {Math.max(0, tried - buys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
+              </span>
+            </p>
+            <button
+              onClick={onOpenInterested}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
+            >
+              Criar mensagem de retorno
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          </>
+        ) : (
+          <p className="mt-3 text-[12.5px] leading-snug text-muted-foreground">
+            Ainda não há dados suficientes. Publique seus primeiros produtos e compartilhe seus QR Codes ou links para começar a acompanhar as experimentações.
+          </p>
+        )}
       </section>
 
       <p className="pb-4 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
