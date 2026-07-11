@@ -33,6 +33,8 @@ export type StoreProfile = {
   endereco: string | null;
   cor: string;
   logo: string | null;
+  physical_enabled: boolean;
+  ecommerce_enabled: boolean;
 };
 
 function normalizeCategory(v: string | null | undefined): StudioCategory {
