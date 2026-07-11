@@ -1973,12 +1973,17 @@ function AddProductModal({
         <MField label="Preço" value={price} onChange={setPrice} placeholder="0,00" type="number" />
         <MField label="Link de compra" value={buyUrl} onChange={setBuyUrl} placeholder="https://" />
         <MField label="SKU (opcional)" value={sku} onChange={setSku} placeholder="SKU-001" />
+        {submitError && (
+          <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+            {submitError}
+          </p>
+        )}
         <button
           onClick={handleSubmit}
           disabled={!valid}
           className="mt-2 rounded-full bg-brand py-3 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-40"
         >
-          Salvar produto
+          {saving ? "Salvando…" : "Salvar produto"}
         </button>
       </div>
     </Modal>
