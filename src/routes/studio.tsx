@@ -1481,7 +1481,7 @@ function ImportModal({
               e.preventDefault();
               setDragOver(false);
               const f = e.dataTransfer.files?.[0];
-              if (f) beginAnalysis(f.name);
+              if (f) beginAnalysis(f);
             }}
             className={`glass flex flex-col items-center justify-center gap-3 rounded-3xl border-dashed py-12 transition-all ${
               dragOver ? "border-brand/60 bg-brand/[0.06]" : "hover:border-white/[0.14]"
@@ -1496,31 +1496,34 @@ function ImportModal({
             </div>
             <div className="flex gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
-                Excel
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
                 CSV
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground opacity-60">
+                Excel em breve
               </span>
             </div>
           </button>
           <input
             ref={fileRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".csv,text/csv"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) beginAnalysis(f.name);
+              if (f) beginAnalysis(f);
             }}
           />
-          <button
-            onClick={() => beginAnalysis("exemplo.xlsx")}
-            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={1.7} /> Usar planilha de exemplo
-          </button>
+          {fileError && (
+            <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+              {fileError}
+            </p>
+          )}
+          <p className="text-center text-[10.5px] text-muted-foreground">
+            Cabeçalhos aceitos: nome, categoria, preco, descricao, imagem, sku, buy_url
+          </p>
         </div>
       )}
+
 
       {step === "analyzing" && (
         <div className="flex flex-col items-center gap-4 py-8">
