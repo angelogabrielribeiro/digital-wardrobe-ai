@@ -132,7 +132,7 @@ function StudioApp() {
   );
 
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [onboardingDone, setOnboardingDone] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [qrProduct, setQrProduct] = useState<StudioProduct | null>(null);
   const [linkProduct, setLinkProduct] = useState<StudioProduct | null>(null);
@@ -140,9 +140,16 @@ function StudioApp() {
   const [addOpen, setAddOpen] = useState(false);
   const [promoteName, setPromoteName] = useState<string | null>(null);
   const [interestedOpen, setInterestedOpen] = useState(false);
-  const [channels, setChannels] = useState<StoreChannels>({ fisica: true, ecommerce: true });
 
-  const showOnboarding = !onboardingDone && products.length === 0 && !productsQuery.isLoading;
+  const store = storeQuery.data ?? null;
+  const channels: StoreChannels = {
+    fisica: store?.physical_enabled ?? true,
+    ecommerce: store?.ecommerce_enabled ?? true,
+  };
+
+  // Onboarding só aparece enquanto não houver produtos publicados.
+  const showOnboarding =
+    !onboardingDismissed && products.length === 0 && !productsQuery.isLoading;
 
   async function handleAddProduct(input: ProductInput) {
     await createProduct(input);
