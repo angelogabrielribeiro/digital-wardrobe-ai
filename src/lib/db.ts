@@ -83,6 +83,8 @@ export async function updateMyStore(patch: Partial<StoreProfile>): Promise<Store
       endereco: patch.endereco,
       cor: patch.cor,
       logo: patch.logo,
+      physical_enabled: patch.physical_enabled,
+      ecommerce_enabled: patch.ecommerce_enabled,
     })
     .eq("id", existing.id)
     .select()
