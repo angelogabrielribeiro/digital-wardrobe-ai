@@ -1414,42 +1414,53 @@ function ImportModal({
 }) {
   const [step, setStep] = useState<ImportStep>("upload");
   const [progress, setProgress] = useState(0);
-  const [rows, setRows] = useState<CatalogRow[]>(MOCK_IMPORT_ROWS);
+  const [rows, setRows] = useState<CatalogRow[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Issue summary detected from mock rows
   const issues = useMemo(() => {
     const noImage = rows.filter((r) => r.status === "sem-imagem").length;
     const badPrice = rows.filter((r) => !(r.price > 0)).length;
-    const unknownCat = 0; // mock rows have valid categories
-    return { noImage, badPrice, unknownCat };
+    return { noImage, badPrice, unknownCat: 0 };
   }, [rows]);
 
-  function beginAnalysis(_name: string) {
+  async function beginAnalysis(file: File) {
+    setFileError(null);
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".csv")) {
+      setFileError("Por enquanto aceitamos apenas arquivos .csv. Excel em breve.");
+      return;
+    }
     setStep("analyzing");
     setProgress(0);
-    const stages = [
-      { label: "Analisando planilha…", ms: 700 },
-      { label: "Identificando produtos…", ms: 900 },
-      { label: "Organizando catálogo…", ms: 800 },
-    ];
-    let i = 0;
-    const next = () => {
-      if (i >= stages.length) {
-        // If there are issues, show summary. Otherwise go straight to review.
-        const hasIssues =
-          rows.some((r) => r.status !== "pronto") || rows.some((r) => !(r.price > 0));
-        setStep(hasIssues ? "issues" : "review");
-        return;
-      }
-      setProgress(i);
-      setTimeout(() => {
-        i += 1;
-        next();
-      }, stages[i].ms);
-    };
-    next();
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      const catalog: CatalogRow[] = parsed.map((p, idx) => ({
+        id: `row-${idx}-${Date.now()}`,
+        name: p.name,
+        category: p.category,
+        price: p.price,
+        sku: p.sku,
+        image: p.image,
+        buyUrl: p.buyUrl,
+        status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
+      }));
+      setRows(catalog);
+      // pequena animação de feedback
+      setProgress(1);
+      await new Promise((r) => setTimeout(r, 400));
+      setProgress(2);
+      await new Promise((r) => setTimeout(r, 300));
+      const hasIssues = catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
+      setStep(catalog.length === 0 ? "upload" : hasIssues ? "issues" : "review");
+      if (catalog.length === 0) setFileError("Nenhum produto encontrado no arquivo.");
+    } catch (err) {
+      console.error(err);
+      setFileError("Não conseguimos ler este arquivo.");
+      setStep("upload");
+    }
   }
 
   return (
