@@ -178,7 +178,7 @@ function StudioApp() {
         {showOnboarding ? (
           <Onboarding
             onImport={() => setImportOpen(true)}
-            onFinish={() => setOnboardingDone(true)}
+            onFinish={() => setOnboardingDismissed(true)}
             hasProducts={products.length > 0}
           />
         ) : (
@@ -196,7 +196,7 @@ function StudioApp() {
             {tab === "insights" && (
               <Insights products={products} onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
             )}
-            {tab === "loja" && <StorePage channels={channels} onChannels={setChannels} />}
+            {tab === "loja" && <StorePage store={store} loading={storeQuery.isLoading} />}
           </>
         )}
       </main>
