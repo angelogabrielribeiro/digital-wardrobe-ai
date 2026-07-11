@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag } from "lucide-react";
-import { fetchProductByToken, logExperiment, type Product } from "@/lib/db";
+import { fetchProductByToken, logExperimentByToken, type Product } from "@/lib/db";
 import beforeImg from "@/assets/ba-1-before.jpg";
 import afterImg from "@/assets/ba-1-after.jpg";
 
