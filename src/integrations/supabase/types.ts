@@ -18,17 +18,26 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          input_url: string | null
           product_id: string
+          result_url: string | null
+          store_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
+          input_url?: string | null
           product_id: string
+          result_url?: string | null
+          store_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          input_url?: string | null
           product_id?: string
+          result_url?: string | null
+          store_id?: string | null
         }
         Relationships: [
           {
@@ -36,6 +45,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]

@@ -1,10 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag } from "lucide-react";
-import { fetchProductByToken, logExperimentByToken, type Product } from "@/lib/db";
+import { fetchProductByToken, type Product } from "@/lib/db";
+import { generateTryOnLook } from "@/lib/tryon.functions";
 import beforeImg from "@/assets/ba-1-before.jpg";
-import afterImg from "@/assets/ba-1-after.jpg";
 
 export const Route = createFileRoute("/try-on/$token")({
   head: ({ params }) => ({
@@ -26,20 +27,11 @@ function TryOnPage() {
     queryFn: () => fetchProductByToken(token),
   });
 
-  // Log a try-on start once the product is loaded.
-  const logged = useRef(false);
-  useEffect(() => {
-    if (product && !logged.current) {
-      logged.current = true;
-      logExperimentByToken(token).catch(() => {});
-    }
-  }, [product]);
-
   if (isLoading) return <Shell><Spinner label="Carregando peça…" /></Shell>;
   if (error) return <Shell><ErrorState message="Não conseguimos carregar essa peça." /></Shell>;
   if (!product) throw notFound();
 
-  return <Shell><Experience product={product} /></Shell>;
+  return <Shell><Experience product={product} token={token} /></Shell>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -81,29 +73,90 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-type Stage = "intro" | "generating" | "result";
+type Stage = "intro" | "uploading" | "generating" | "result" | "error";
 
-function Experience({ product }: { product: Product }) {
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function categoryFor(product: Product): "tops" | "bottoms" {
+  return product.category === "inferior" ? "bottoms" : "tops";
+}
+
+function Experience({ product, token }: { product: Product; token: string }) {
   const [stage, setStage] = useState<Stage>("intro");
+  const [statusLabel, setStatusLabel] = useState("Preparando sua foto…");
   const [modelImg, setModelImg] = useState<string | null>(null);
+  const [resultImg, setResultImg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
+  const generate = useServerFn(generateTryOnLook);
+
+  async function runGeneration(modelDataUrl: string) {
+    if (!product.image) {
+      setErrorMsg("Esta peça ainda não tem imagem configurada.");
+      setStage("error");
+      return;
+    }
+    setStage("generating");
+    setStatusLabel("Gerando o seu look…");
+    try {
+      const res = await generate({
+        data: {
+          token,
+          model_image: modelDataUrl,
+          garment_image: product.image,
+          category: categoryFor(product),
+        },
+      });
+      setResultImg(res.imageUrl);
+      setStage("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Não foi possível gerar o look. Tente novamente.");
+      setStage("error");
+    }
+  }
 
   function readFile(f: File) {
+    setErrorMsg("");
+    if (!ALLOWED_TYPES.includes(f.type)) {
+      setErrorMsg("Formato inválido. Use JPG, PNG ou WEBP.");
+      setStage("error");
+      return;
+    }
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setErrorMsg("Foto muito grande (máx. 8 MB).");
+      setStage("error");
+      return;
+    }
+    setStage("uploading");
+    setStatusLabel("Preparando sua foto…");
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setModelImg(String(ev.target?.result ?? ""));
-      setStage("generating");
-      // Mock generation — arquitetura pronta para FAL depois.
-      setTimeout(() => setStage("result"), 1600);
+      const dataUrl = String(ev.target?.result ?? "");
+      setModelImg(dataUrl);
+      void runGeneration(dataUrl);
+    };
+    reader.onerror = () => {
+      setErrorMsg("Não conseguimos ler sua foto. Tente outra.");
+      setStage("error");
     };
     reader.readAsDataURL(f);
   }
 
+  function retry() {
+    if (modelImg) void runGeneration(modelImg);
+  }
+
   function reset() {
     setModelImg(null);
+    setResultImg(null);
+    setErrorMsg("");
     setStage("intro");
+    if (fileRef.current) fileRef.current.value = "";
+    if (camRef.current) camRef.current.value = "";
   }
+
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-10 pt-6 fade-in">
@@ -156,14 +209,36 @@ function Experience({ product }: { product: Product }) {
         </section>
       )}
 
-      {stage === "generating" && (
+      {(stage === "uploading" || stage === "generating") && (
         <section className="glass flex flex-col items-center gap-4 rounded-3xl p-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
             <Sparkles className="h-5 w-5 animate-pulse text-brand" strokeWidth={1.7} />
           </div>
           <p className="text-center text-[13px] text-muted-foreground">
-            Gerando o seu look… isso leva alguns segundos.
+            {statusLabel} isso pode levar alguns segundos.
           </p>
+        </section>
+      )}
+
+      {stage === "error" && (
+        <section className="glass flex flex-col items-center gap-4 rounded-3xl p-6">
+          <p className="text-center text-[13px] text-foreground">{errorMsg}</p>
+          <div className="grid w-full grid-cols-2 gap-2">
+            <button
+              onClick={reset}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3 text-[12.5px] font-medium hover:bg-white/[0.06]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Nova foto
+            </button>
+            {modelImg && (
+              <button
+                onClick={retry}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99]"
+              >
+                <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} /> Tentar de novo
+              </button>
+            )}
+          </div>
         </section>
       )}
 
@@ -172,12 +247,9 @@ function Experience({ product }: { product: Product }) {
           <div className="glass overflow-hidden rounded-3xl">
             <div className="grid grid-cols-2 gap-px bg-white/[0.06]">
               <ImageTile src={modelImg ?? beforeImg} label="Você" />
-              <ImageTile src={afterImg} label="Com a peça" />
+              <ImageTile src={resultImg ?? beforeImg} label="Com a peça" />
             </div>
           </div>
-          <p className="text-center text-[11px] text-muted-foreground">
-            Prévia demonstrativa. Resultado real gerado por IA em breve.
-          </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={reset}
