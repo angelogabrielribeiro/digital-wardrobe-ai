@@ -92,28 +92,34 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
     const key = process.env.FAL_KEY;
     if (!key) throw new Error("Serviço de try-on indisponível.");
 
-    // Resolve product + store from token via admin client (bypasses RLS on qrcodes).
+    // Resolve product + store from token (when present) via admin client (bypasses RLS on qrcodes).
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: qr, error: qrErr } = await supabaseAdmin
-      .from("qrcodes")
-      .select("product_id, products!inner(id, store_id, status)")
-      .eq("token", data.token)
-      .maybeSingle();
-    if (qrErr) throw new Error("Não foi possível localizar a peça.");
-    const product = qr?.products as { id: string; store_id: string; status: string } | null;
-    if (!product || product.status !== "pronto") throw new Error("Peça indisponível.");
+    let product: { id: string; store_id: string } | null = null;
+    if (data.token) {
+      const { data: qr, error: qrErr } = await supabaseAdmin
+        .from("qrcodes")
+        .select("product_id, products!inner(id, store_id, status)")
+        .eq("token", data.token)
+        .maybeSingle();
+      if (qrErr) throw new Error("Não foi possível localizar a peça.");
+      const p = qr?.products as { id: string; store_id: string; status: string } | null;
+      if (!p || p.status !== "pronto") throw new Error("Peça indisponível.");
+      product = { id: p.id, store_id: p.store_id };
+    }
 
-    // 1. Upload input photo to storage for later analytics.
+    // 1. Upload input photo to storage for later analytics (only for tokenised sessions).
     let inputUrl: string | null = null;
-    try {
-      const { bytes, contentType, ext } = dataUrlToBytes(data.model_image);
-      const path = `${product.store_id}/${product.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabaseAdmin.storage
-        .from("tryon-uploads")
-        .upload(path, bytes, { contentType, upsert: false });
-      if (!upErr) inputUrl = path;
-    } catch {
-      // Non-blocking — try-on continues even if archival upload fails.
+    if (product) {
+      try {
+        const { bytes, contentType, ext } = dataUrlToBytes(data.model_image);
+        const path = `${product.store_id}/${product.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabaseAdmin.storage
+          .from("tryon-uploads")
+          .upload(path, bytes, { contentType, upsert: false });
+        if (!upErr) inputUrl = path;
+      } catch {
+        // Non-blocking — try-on continues even if archival upload fails.
+      }
     }
 
     // 2. Enqueue FAL request.
