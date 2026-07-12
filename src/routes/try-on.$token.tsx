@@ -27,20 +27,11 @@ function TryOnPage() {
     queryFn: () => fetchProductByToken(token),
   });
 
-  // Log a try-on start once the product is loaded.
-  const logged = useRef(false);
-  useEffect(() => {
-    if (product && !logged.current) {
-      logged.current = true;
-      logExperimentByToken(token).catch(() => {});
-    }
-  }, [product]);
-
   if (isLoading) return <Shell><Spinner label="Carregando peça…" /></Shell>;
   if (error) return <Shell><ErrorState message="Não conseguimos carregar essa peça." /></Shell>;
   if (!product) throw notFound();
 
-  return <Shell><Experience product={product} /></Shell>;
+  return <Shell><Experience product={product} token={token} /></Shell>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
