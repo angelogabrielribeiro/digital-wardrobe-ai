@@ -52,12 +52,11 @@ function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; contentType: stri
 export const generateTryOnLook = createServerFn({ method: "POST" })
   .inputValidator(
     (input: {
-      token: string;
+      token?: string;
       model_image: string;
       garment_image: string;
       category: "tops" | "bottoms";
     }) => {
-      if (!input?.token || typeof input.token !== "string") throw new Error("Token inválido.");
       if (!input?.model_image) throw new Error("Envie uma foto do modelo.");
       if (!input?.garment_image) throw new Error("Envie a foto ou URL da peça.");
       if (!["tops", "bottoms"].includes(input.category)) throw new Error("Categoria inválida.");
