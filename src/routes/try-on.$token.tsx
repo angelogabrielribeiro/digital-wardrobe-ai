@@ -73,29 +73,90 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-type Stage = "intro" | "generating" | "result";
+type Stage = "intro" | "uploading" | "generating" | "result" | "error";
 
-function Experience({ product }: { product: Product }) {
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function categoryFor(product: Product): "tops" | "bottoms" {
+  return product.category === "inferior" ? "bottoms" : "tops";
+}
+
+function Experience({ product, token }: { product: Product; token: string }) {
   const [stage, setStage] = useState<Stage>("intro");
+  const [statusLabel, setStatusLabel] = useState("Preparando sua foto…");
   const [modelImg, setModelImg] = useState<string | null>(null);
+  const [resultImg, setResultImg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
+  const generate = useServerFn(generateTryOnLook);
+
+  async function runGeneration(modelDataUrl: string) {
+    if (!product.image) {
+      setErrorMsg("Esta peça ainda não tem imagem configurada.");
+      setStage("error");
+      return;
+    }
+    setStage("generating");
+    setStatusLabel("Gerando o seu look…");
+    try {
+      const res = await generate({
+        data: {
+          token,
+          model_image: modelDataUrl,
+          garment_image: product.image,
+          category: categoryFor(product),
+        },
+      });
+      setResultImg(res.imageUrl);
+      setStage("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Não foi possível gerar o look. Tente novamente.");
+      setStage("error");
+    }
+  }
 
   function readFile(f: File) {
+    setErrorMsg("");
+    if (!ALLOWED_TYPES.includes(f.type)) {
+      setErrorMsg("Formato inválido. Use JPG, PNG ou WEBP.");
+      setStage("error");
+      return;
+    }
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setErrorMsg("Foto muito grande (máx. 8 MB).");
+      setStage("error");
+      return;
+    }
+    setStage("uploading");
+    setStatusLabel("Preparando sua foto…");
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setModelImg(String(ev.target?.result ?? ""));
-      setStage("generating");
-      // Mock generation — arquitetura pronta para FAL depois.
-      setTimeout(() => setStage("result"), 1600);
+      const dataUrl = String(ev.target?.result ?? "");
+      setModelImg(dataUrl);
+      void runGeneration(dataUrl);
+    };
+    reader.onerror = () => {
+      setErrorMsg("Não conseguimos ler sua foto. Tente outra.");
+      setStage("error");
     };
     reader.readAsDataURL(f);
   }
 
+  function retry() {
+    if (modelImg) void runGeneration(modelImg);
+  }
+
   function reset() {
     setModelImg(null);
+    setResultImg(null);
+    setErrorMsg("");
     setStage("intro");
+    if (fileRef.current) fileRef.current.value = "";
+    if (camRef.current) camRef.current.value = "";
   }
+
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-10 pt-6 fade-in">
