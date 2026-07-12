@@ -209,14 +209,36 @@ function Experience({ product, token }: { product: Product; token: string }) {
         </section>
       )}
 
-      {stage === "generating" && (
+      {(stage === "uploading" || stage === "generating") && (
         <section className="glass flex flex-col items-center gap-4 rounded-3xl p-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
             <Sparkles className="h-5 w-5 animate-pulse text-brand" strokeWidth={1.7} />
           </div>
           <p className="text-center text-[13px] text-muted-foreground">
-            Gerando o seu look… isso leva alguns segundos.
+            {statusLabel} isso pode levar alguns segundos.
           </p>
+        </section>
+      )}
+
+      {stage === "error" && (
+        <section className="glass flex flex-col items-center gap-4 rounded-3xl p-6">
+          <p className="text-center text-[13px] text-foreground">{errorMsg}</p>
+          <div className="grid w-full grid-cols-2 gap-2">
+            <button
+              onClick={reset}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3 text-[12.5px] font-medium hover:bg-white/[0.06]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Nova foto
+            </button>
+            {modelImg && (
+              <button
+                onClick={retry}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99]"
+              >
+                <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} /> Tentar de novo
+              </button>
+            )}
+          </div>
         </section>
       )}
 
@@ -225,12 +247,9 @@ function Experience({ product, token }: { product: Product; token: string }) {
           <div className="glass overflow-hidden rounded-3xl">
             <div className="grid grid-cols-2 gap-px bg-white/[0.06]">
               <ImageTile src={modelImg ?? beforeImg} label="Você" />
-              <ImageTile src={afterImg} label="Com a peça" />
+              <ImageTile src={resultImg ?? beforeImg} label="Com a peça" />
             </div>
           </div>
-          <p className="text-center text-[11px] text-muted-foreground">
-            Prévia demonstrativa. Resultado real gerado por IA em breve.
-          </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={reset}
