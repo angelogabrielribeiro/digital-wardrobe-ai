@@ -1,10 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag } from "lucide-react";
-import { fetchProductByToken, logExperimentByToken, type Product } from "@/lib/db";
+import { fetchProductByToken, type Product } from "@/lib/db";
+import { generateTryOnLook } from "@/lib/tryon.functions";
 import beforeImg from "@/assets/ba-1-before.jpg";
-import afterImg from "@/assets/ba-1-after.jpg";
 
 export const Route = createFileRoute("/try-on/$token")({
   head: ({ params }) => ({
