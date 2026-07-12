@@ -177,15 +177,17 @@ export const generateTryOnLook = createServerFn({ method: "POST" })
     if (!imageUrl) throw new Error("Nenhuma imagem retornada.");
 
     // 5. Persist experiment (non-blocking on failure — user still gets result).
-    try {
-      await supabaseAdmin.from("experiments").insert({
-        product_id: product.id,
-        store_id: product.store_id,
-        input_url: inputUrl,
-        result_url: imageUrl,
-      });
-    } catch {
-      // Ignore analytics write failures.
+    if (product) {
+      try {
+        await supabaseAdmin.from("experiments").insert({
+          product_id: product.id,
+          store_id: product.store_id,
+          input_url: inputUrl,
+          result_url: imageUrl,
+        });
+      } catch {
+        // Ignore analytics write failures.
+      }
     }
 
     return { imageUrl };
