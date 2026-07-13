@@ -15,7 +15,7 @@ import {
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
-import { parseCsv } from "@/lib/csv";
+import { parseSpreadsheetFile, isSupportedSpreadsheet } from "@/lib/spreadsheet";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
 const CATEGORY_LABEL: Record<StudioCategory, string> = {
