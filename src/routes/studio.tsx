@@ -1532,23 +1532,24 @@ function ImportModal({
             </div>
             <div className="flex gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
-                CSV
+                Excel
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground opacity-60">
-                Excel em breve
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
+                CSV
               </span>
             </div>
           </button>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) beginAnalysis(f);
             }}
           />
+
           {fileError && (
             <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
               {fileError}
