@@ -1465,16 +1465,14 @@ function ImportModal({
 
   async function beginAnalysis(file: File) {
     setFileError(null);
-    const name = file.name.toLowerCase();
-    if (!name.endsWith(".csv")) {
-      setFileError("Por enquanto aceitamos apenas arquivos .csv. Excel em breve.");
+    if (!isSupportedSpreadsheet(file)) {
+      setFileError("Envie uma planilha do Excel (.xlsx) ou um arquivo .csv.");
       return;
     }
     setStep("analyzing");
     setProgress(0);
     try {
-      const text = await file.text();
-      const parsed = parseCsv(text);
+      const parsed = await parseSpreadsheetFile(file);
       const catalog: CatalogRow[] = parsed.map((p, idx) => ({
         id: `row-${idx}-${Date.now()}`,
         name: p.name,
@@ -1486,7 +1484,6 @@ function ImportModal({
         status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
       }));
       setRows(catalog);
-      // pequena animação de feedback
       setProgress(1);
       await new Promise((r) => setTimeout(r, 400));
       setProgress(2);
@@ -1496,10 +1493,11 @@ function ImportModal({
       if (catalog.length === 0) setFileError("Nenhum produto encontrado no arquivo.");
     } catch (err) {
       console.error(err);
-      setFileError("Não conseguimos ler este arquivo.");
+      setFileError("Não conseguimos ler este arquivo. Verifique se é uma planilha válida.");
       setStep("upload");
     }
   }
+
 
   return (
     <Modal onClose={onClose} title="Importar catálogo">
