@@ -30,7 +30,7 @@ import {
   Store,
 
 } from "lucide-react";
-import { generateTryOnLook } from "@/lib/tryon.functions";
+import { generateTryOnLook, recoverTryOnLook } from "@/lib/tryon.functions";
 import ba1Before from "@/assets/ba-1-before.jpg";
 import ba1After from "@/assets/ba-1-after.jpg";
 import ba2Before from "@/assets/ba-2-before.jpg";
@@ -84,6 +84,9 @@ function AuraFitApp() {
   const [proModal, setProModal] = useState(false);
 
   const generateFn = useServerFn(generateTryOnLook);
+  const recoverFn = useServerFn(recoverTryOnLook);
+  const inFlight = useRef(false);
+  const pendingRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -97,6 +100,7 @@ function AuraFitApp() {
   }, [savedLooks]);
 
   async function handleGenerate() {
+    if (inFlight.current) return;
     setErrorMessage(null);
     const model = modelImage;
     const trimmedUrl = garmentImageUrl.trim();
@@ -118,13 +122,38 @@ function AuraFitApp() {
     }
     const apiCategory: ApiCategory = uiCategory === "inferior" ? "bottoms" : "tops";
 
+    inFlight.current = true;
     setCurrentScreen("loading");
+
+    // If a previous attempt left a pending request_id, try to recover first
+    // instead of spending a fresh generation.
+    if (pendingRequestId.current) {
+      try {
+        const res = await recoverFn({ data: { requestId: pendingRequestId.current } });
+        pendingRequestId.current = null;
+        setGeneratedImage(res.imageUrl);
+        const item: SavedLook = {
+          id: crypto.randomUUID(),
+          url: res.imageUrl,
+          category: uiCategory,
+          createdAt: Date.now(),
+          buyUrl: garmentBuyUrl.trim() || undefined,
+        };
+        setSavedLooks((s) => [item, ...s]);
+        setCurrentScreen("result");
+        inFlight.current = false;
+        return;
+      } catch {
+        // fall through to a fresh attempt
+        pendingRequestId.current = null;
+      }
+    }
+
     try {
       const res = await generateFn({
         data: { model_image: model, garment_image: garment, category: apiCategory },
       });
       setGeneratedImage(res.imageUrl);
-      // auto-save to history
       const item: SavedLook = {
         id: crypto.randomUUID(),
         url: res.imageUrl,
@@ -135,10 +164,20 @@ function AuraFitApp() {
       setSavedLooks((s) => [item, ...s]);
       setCurrentScreen("result");
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.");
+      const rid = (e as { requestId?: string })?.requestId ?? null;
+      if (rid) {
+        pendingRequestId.current = rid;
+        setErrorMessage("Seu resultado ainda está sendo finalizado. Toque em Gerar novamente para recuperar sem cobrar.");
+      } else {
+        const msg = e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.";
+        setErrorMessage(msg === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : msg);
+      }
       setCurrentScreen("tryon");
+    } finally {
+      inFlight.current = false;
     }
   }
+
 
   function openTryOn(cat: UiCategory) {
     if (PRO_CATS.includes(cat)) {
@@ -406,7 +445,7 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
   return (
     <div
       ref={ref}
-      className="glass relative aspect-[3/4] w-full overflow-hidden rounded-[28px] select-none touch-none"
+      className="glass relative aspect-[3/4] w-full overflow-hidden rounded-[28px] select-none touch-none bg-black/60"
       onPointerDown={(e) => {
         dragging.current = true;
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -416,23 +455,23 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
       onPointerUp={() => (dragging.current = false)}
       onPointerCancel={() => (dragging.current = false)}
     >
+      {/* Both images fill the same box with object-contain so their scale
+          matches exactly on every device — no head/feet cropping. */}
       <img
         src={after}
         alt="Depois"
         loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-contain"
         draggable={false}
       />
-      <div className="absolute inset-0 overflow-hidden" style={{ width: `${pos}%` }}>
-        <img
-          src={before}
-          alt="Antes"
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ width: `${100 * (100 / Math.max(pos, 0.0001))}%`, maxWidth: "none" }}
-          draggable={false}
-        />
-      </div>
+      <img
+        src={before}
+        alt="Antes"
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-contain"
+        style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
+        draggable={false}
+      />
 
       <span className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
         Antes

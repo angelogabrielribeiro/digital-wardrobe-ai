@@ -2,10 +2,9 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag, RefreshCw } from "lucide-react";
 import { fetchProductByToken, type Product } from "@/lib/db";
-import { generateTryOnLook } from "@/lib/tryon.functions";
-import beforeImg from "@/assets/ba-1-before.jpg";
+import { generateTryOnLook, recoverTryOnLook } from "@/lib/tryon.functions";
 
 export const Route = createFileRoute("/try-on/$token")({
   head: ({ params }) => ({
@@ -73,7 +72,7 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-type Stage = "intro" | "uploading" | "generating" | "result" | "error";
+type Stage = "intro" | "uploading" | "generating" | "recovering" | "result" | "error";
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -88,9 +87,12 @@ function Experience({ product, token }: { product: Product; token: string }) {
   const [modelImg, setModelImg] = useState<string | null>(null);
   const [resultImg, setResultImg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [recoverable, setRecoverable] = useState<string | null>(null);
+  const inFlight = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const generate = useServerFn(generateTryOnLook);
+  const recover = useServerFn(recoverTryOnLook);
 
   async function runGeneration(modelDataUrl: string) {
     if (!product.image) {
@@ -98,6 +100,8 @@ function Experience({ product, token }: { product: Product; token: string }) {
       setStage("error");
       return;
     }
+    if (inFlight.current) return;
+    inFlight.current = true;
     setStage("generating");
     setStatusLabel("Gerando o seu look…");
     try {
@@ -110,15 +114,44 @@ function Experience({ product, token }: { product: Product; token: string }) {
         },
       });
       setResultImg(res.imageUrl);
+      setRecoverable(null);
       setStage("result");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Não foi possível gerar o look. Tente novamente.");
+      const rid = (err as { requestId?: string })?.requestId ?? null;
+      const raw = err instanceof Error ? err.message : "Não foi possível gerar o look.";
+      if (rid) {
+        setRecoverable(rid);
+        setErrorMsg("Seu resultado ainda está sendo finalizado. Vamos tentar recuperar sem gerar novamente.");
+      } else {
+        setErrorMsg(raw === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : raw);
+      }
       setStage("error");
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
+  async function runRecovery() {
+    if (!recoverable || inFlight.current) return;
+    inFlight.current = true;
+    setStage("recovering");
+    setStatusLabel("Recuperando seu resultado…");
+    try {
+      const res = await recover({ data: { requestId: recoverable } });
+      setResultImg(res.imageUrl);
+      setRecoverable(null);
+      setStage("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Não foi possível recuperar o resultado.");
+      setStage("error");
+    } finally {
+      inFlight.current = false;
     }
   }
 
   function readFile(f: File) {
     setErrorMsg("");
+    setRecoverable(null);
     if (!ALLOWED_TYPES.includes(f.type)) {
       setErrorMsg("Formato inválido. Use JPG, PNG ou WEBP.");
       setStage("error");
@@ -144,7 +177,7 @@ function Experience({ product, token }: { product: Product; token: string }) {
     reader.readAsDataURL(f);
   }
 
-  function retry() {
+  function retryGenerate() {
     if (modelImg) void runGeneration(modelImg);
   }
 
@@ -152,11 +185,13 @@ function Experience({ product, token }: { product: Product; token: string }) {
     setModelImg(null);
     setResultImg(null);
     setErrorMsg("");
+    setRecoverable(null);
     setStage("intro");
     if (fileRef.current) fileRef.current.value = "";
     if (camRef.current) camRef.current.value = "";
   }
 
+  const busy = stage === "uploading" || stage === "generating" || stage === "recovering";
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-10 pt-6 fade-in">
@@ -188,13 +223,15 @@ function Experience({ product, token }: { product: Product; token: string }) {
           </p>
           <button
             onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-[13px] font-medium text-white transition-transform active:scale-[0.99]"
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-[13px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-60"
           >
             <Upload className="h-4 w-4" strokeWidth={1.8} /> Enviar foto
           </button>
           <button
             onClick={() => camRef.current?.click()}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3.5 text-[13px] font-medium hover:bg-white/[0.06]"
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3.5 text-[13px] font-medium hover:bg-white/[0.06] disabled:opacity-60"
           >
             <Camera className="h-4 w-4" strokeWidth={1.8} /> Tirar foto
           </button>
@@ -209,7 +246,7 @@ function Experience({ product, token }: { product: Product; token: string }) {
         </section>
       )}
 
-      {(stage === "uploading" || stage === "generating") && (
+      {(stage === "uploading" || stage === "generating" || stage === "recovering") && (
         <section className="glass flex flex-col items-center gap-4 rounded-3xl p-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
             <Sparkles className="h-5 w-5 animate-pulse text-brand" strokeWidth={1.7} />
@@ -226,18 +263,28 @@ function Experience({ product, token }: { product: Product; token: string }) {
           <div className="grid w-full grid-cols-2 gap-2">
             <button
               onClick={reset}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3 text-[12.5px] font-medium hover:bg-white/[0.06]"
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-3 text-[12.5px] font-medium hover:bg-white/[0.06] disabled:opacity-60"
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Nova foto
             </button>
-            {modelImg && (
+            {recoverable ? (
               <button
-                onClick={retry}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99]"
+                onClick={runRecovery}
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-60"
+              >
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} /> Recuperar
+              </button>
+            ) : modelImg ? (
+              <button
+                onClick={retryGenerate}
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-60"
               >
                 <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} /> Tentar de novo
               </button>
-            )}
+            ) : null}
           </div>
         </section>
       )}
@@ -246,8 +293,8 @@ function Experience({ product, token }: { product: Product; token: string }) {
         <section className="flex flex-col gap-3">
           <div className="glass overflow-hidden rounded-3xl">
             <div className="grid grid-cols-2 gap-px bg-white/[0.06]">
-              <ImageTile src={modelImg ?? beforeImg} label="Você" />
-              <ImageTile src={resultImg ?? beforeImg} label="Com a peça" />
+              {modelImg && <ImageTile src={modelImg} label="Você" />}
+              {resultImg && <ImageTile src={resultImg} label="Com a peça" />}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -283,8 +330,12 @@ function Experience({ product, token }: { product: Product; token: string }) {
 
 function ImageTile({ src, label }: { src: string; label: string }) {
   return (
-    <div className="relative">
-      <img src={src} alt={label} className="aspect-[3/4] w-full object-cover" />
+    <div className="relative bg-black/50">
+      <img
+        src={src}
+        alt={label}
+        className="aspect-[3/4] w-full object-contain"
+      />
       <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
         {label}
       </span>
