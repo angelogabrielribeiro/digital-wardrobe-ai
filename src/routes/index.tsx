@@ -84,6 +84,9 @@ function AuraFitApp() {
   const [proModal, setProModal] = useState(false);
 
   const generateFn = useServerFn(generateTryOnLook);
+  const recoverFn = useServerFn(recoverTryOnLook);
+  const inFlight = useRef(false);
+  const pendingRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -97,6 +100,7 @@ function AuraFitApp() {
   }, [savedLooks]);
 
   async function handleGenerate() {
+    if (inFlight.current) return;
     setErrorMessage(null);
     const model = modelImage;
     const trimmedUrl = garmentImageUrl.trim();
@@ -118,13 +122,38 @@ function AuraFitApp() {
     }
     const apiCategory: ApiCategory = uiCategory === "inferior" ? "bottoms" : "tops";
 
+    inFlight.current = true;
     setCurrentScreen("loading");
+
+    // If a previous attempt left a pending request_id, try to recover first
+    // instead of spending a fresh generation.
+    if (pendingRequestId.current) {
+      try {
+        const res = await recoverFn({ data: { requestId: pendingRequestId.current } });
+        pendingRequestId.current = null;
+        setGeneratedImage(res.imageUrl);
+        const item: SavedLook = {
+          id: crypto.randomUUID(),
+          url: res.imageUrl,
+          category: uiCategory,
+          createdAt: Date.now(),
+          buyUrl: garmentBuyUrl.trim() || undefined,
+        };
+        setSavedLooks((s) => [item, ...s]);
+        setCurrentScreen("result");
+        inFlight.current = false;
+        return;
+      } catch {
+        // fall through to a fresh attempt
+        pendingRequestId.current = null;
+      }
+    }
+
     try {
       const res = await generateFn({
         data: { model_image: model, garment_image: garment, category: apiCategory },
       });
       setGeneratedImage(res.imageUrl);
-      // auto-save to history
       const item: SavedLook = {
         id: crypto.randomUUID(),
         url: res.imageUrl,
@@ -135,10 +164,20 @@ function AuraFitApp() {
       setSavedLooks((s) => [item, ...s]);
       setCurrentScreen("result");
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.");
+      const rid = (e as { requestId?: string })?.requestId ?? null;
+      if (rid) {
+        pendingRequestId.current = rid;
+        setErrorMessage("Seu resultado ainda está sendo finalizado. Toque em Gerar novamente para recuperar sem cobrar.");
+      } else {
+        const msg = e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.";
+        setErrorMessage(msg === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : msg);
+      }
       setCurrentScreen("tryon");
+    } finally {
+      inFlight.current = false;
     }
   }
+
 
   function openTryOn(cat: UiCategory) {
     if (PRO_CATS.includes(cat)) {
