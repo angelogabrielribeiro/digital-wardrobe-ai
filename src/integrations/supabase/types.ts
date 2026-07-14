@@ -17,27 +17,39 @@ export type Database = {
       experiments: {
         Row: {
           created_at: string
+          error_message: string | null
+          fal_request_id: string | null
           id: string
           input_url: string | null
           product_id: string
           result_url: string | null
+          status: string
           store_id: string | null
+          updated_at: string
         }
         Insert: {
           created_at?: string
+          error_message?: string | null
+          fal_request_id?: string | null
           id?: string
           input_url?: string | null
           product_id: string
           result_url?: string | null
+          status?: string
           store_id?: string | null
+          updated_at?: string
         }
         Update: {
           created_at?: string
+          error_message?: string | null
+          fal_request_id?: string | null
           id?: string
           input_url?: string | null
           product_id?: string
           result_url?: string | null
+          status?: string
           store_id?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
