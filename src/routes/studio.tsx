@@ -1455,9 +1455,11 @@ function ImportModal({
   onPublish,
 }: {
   onClose: () => void;
-  onPublish: (rows: CatalogRow[]) => void;
+  onPublish: (rows: CatalogRow[]) => Promise<void>;
 }) {
   const [step, setStep] = useState<ImportStep>("upload");
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [dragOver, setDragOver] = useState(false);
