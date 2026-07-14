@@ -211,7 +211,7 @@ function StudioApp() {
       {storeReady && !showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
       {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
-      {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
+      {qrProduct && <QrModal product={qrProduct} storeName={store?.nome ?? null} onClose={() => setQrProduct(null)} />}
       {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
