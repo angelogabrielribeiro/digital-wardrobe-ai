@@ -178,7 +178,11 @@ function StudioApp() {
       <StudioHeader onLogout={async () => { await signOut(); qc.clear(); navigate({ to: "/auth", replace: true }); }} />
 
       <main className="flex-1">
-        {showOnboarding ? (
+        {!storeReady ? (
+          <div className="flex min-h-[60vh] items-center justify-center px-5 text-center">
+            <p className="text-[12.5px] text-muted-foreground">Carregando sua loja…</p>
+          </div>
+        ) : showOnboarding ? (
           <Onboarding
             onImport={() => setImportOpen(true)}
             onFinish={() => setOnboardingDismissed(true)}
@@ -204,7 +208,7 @@ function StudioApp() {
         )}
       </main>
 
-      {!showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
+      {storeReady && !showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
       {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
