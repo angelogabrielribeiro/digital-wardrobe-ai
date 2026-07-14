@@ -1673,19 +1673,51 @@ function ImportModal({
               </div>
             ))}
           </div>
+          {publishError && (
+            <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
+              {publishError}
+            </p>
+          )}
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => setRows((s) => s.filter((r) => r.status !== "sem-imagem"))}
-              className="flex-1 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
+              disabled={publishing}
+              className="flex-1 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06] disabled:opacity-60"
             >
               Remover incompletos
             </button>
             <button
-              onClick={() => onPublish(rows)}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white transition-transform active:scale-[0.98]"
+              onClick={async () => {
+                if (publishing || rows.length === 0) return;
+                setPublishError(null);
+                setPublishing(true);
+                try {
+                  await onPublish(rows);
+                } catch (err) {
+                  console.error(err);
+                  setPublishError(
+                    err instanceof Error && err.message
+                      ? err.message
+                      : "Não foi possível publicar seu catálogo. Tente novamente.",
+                  );
+                } finally {
+                  setPublishing(false);
+                }
+              }}
+              disabled={publishing || rows.length === 0}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white transition-transform active:scale-[0.98] disabled:opacity-70"
             >
-              Publicar
-              <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+              {publishing ? (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 animate-pulse" strokeWidth={1.8} />
+                  Publicando…
+                </>
+              ) : (
+                <>
+                  Publicar
+                  <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </>
+              )}
             </button>
           </div>
         </div>
