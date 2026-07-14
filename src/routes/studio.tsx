@@ -147,9 +147,11 @@ function StudioApp() {
     ecommerce: store?.ecommerce_enabled ?? true,
   };
 
-  // Onboarding só aparece enquanto não houver produtos publicados.
+  // Aguarda o carregamento das consultas antes de decidir entre onboarding e Painel,
+  // para não “piscar” o Painel vazio antes do onboarding.
+  const storeReady = !productsQuery.isLoading && !storeQuery.isLoading;
   const showOnboarding =
-    !onboardingDismissed && products.length === 0 && !productsQuery.isLoading;
+    storeReady && !onboardingDismissed && products.length === 0;
 
   async function handleAddProduct(input: ProductInput) {
     await createProduct(input);
@@ -169,6 +171,7 @@ function StudioApp() {
   if (authLoading || !session) {
     return <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Carregando…</div>;
   }
+
 
   return (
     <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
