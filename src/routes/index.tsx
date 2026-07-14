@@ -406,7 +406,7 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
   return (
     <div
       ref={ref}
-      className="glass relative aspect-[3/4] w-full overflow-hidden rounded-[28px] select-none touch-none"
+      className="glass relative aspect-[3/4] w-full overflow-hidden rounded-[28px] select-none touch-none bg-black/60"
       onPointerDown={(e) => {
         dragging.current = true;
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -416,23 +416,23 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
       onPointerUp={() => (dragging.current = false)}
       onPointerCancel={() => (dragging.current = false)}
     >
+      {/* Both images fill the same box with object-contain so their scale
+          matches exactly on every device — no head/feet cropping. */}
       <img
         src={after}
         alt="Depois"
         loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-contain"
         draggable={false}
       />
-      <div className="absolute inset-0 overflow-hidden" style={{ width: `${pos}%` }}>
-        <img
-          src={before}
-          alt="Antes"
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ width: `${100 * (100 / Math.max(pos, 0.0001))}%`, maxWidth: "none" }}
-          draggable={false}
-        />
-      </div>
+      <img
+        src={before}
+        alt="Antes"
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-contain"
+        style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
+        draggable={false}
+      />
 
       <span className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
         Antes
