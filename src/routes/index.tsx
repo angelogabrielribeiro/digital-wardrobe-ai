@@ -30,7 +30,7 @@ import {
   Store,
 
 } from "lucide-react";
-import { generateTryOnLook } from "@/lib/tryon.functions";
+import { generateTryOnLook, recoverTryOnLook } from "@/lib/tryon.functions";
 import ba1Before from "@/assets/ba-1-before.jpg";
 import ba1After from "@/assets/ba-1-after.jpg";
 import ba2Before from "@/assets/ba-2-before.jpg";
