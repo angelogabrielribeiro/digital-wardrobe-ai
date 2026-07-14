@@ -1766,7 +1766,15 @@ function StatusChip({ status }: { status: CatalogRow["status"] }) {
 }
 
 /* ─────────────────────────── QR modal ─────────────────────────── */
-function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => void }) {
+function QrModal({
+  product,
+  storeName,
+  onClose,
+}: {
+  product: StudioProduct;
+  storeName: string | null;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [qrSrc, setQrSrc] = useState<string | null>(null);
   const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
@@ -1780,6 +1788,40 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
     navigator.clipboard?.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
+  }
+
+  function printLabel() {
+    if (!qrSrc) return;
+    const priceHtml = product.price > 0
+      ? `<p class="price">R$ ${product.price.toFixed(2).replace(".", ",")}</p>`
+      : "";
+    const safeStore = (storeName ?? "AuraFit").replace(/[<>&]/g, "");
+    const safeName = product.name.replace(/[<>&]/g, "");
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>QR ${safeName}</title>
+<style>
+  @page { size: A4; margin: 24mm; }
+  html, body { background:#fff; color:#000; margin:0; padding:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  .label { max-width: 360px; margin: 0 auto; padding: 24px; text-align: center; border: 1px dashed #d0d0d0; border-radius: 16px; }
+  .store { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #444; margin-bottom: 14px; }
+  .qr { display:block; margin: 0 auto; width: 240px; height: 240px; image-rendering: crisp-edges; }
+  h1 { font-size: 18px; margin: 18px 0 6px; font-weight: 600; }
+  .price { font-size: 14px; color: #333; margin: 0 0 12px; }
+  p.cta { font-size: 12px; color: #444; margin: 10px 0 0; line-height: 1.4; }
+</style></head><body>
+<div class="label">
+  <div class="store">${safeStore}</div>
+  <img class="qr" src="${qrSrc}" alt="QR ${safeName}" />
+  <h1>${safeName}</h1>
+  ${priceHtml}
+  <p class="cta">Escaneie e veja como fica em você.</p>
+</div>
+<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 60); };</script>
+</body></html>`;
+    const w = window.open("", "_blank", "width=480,height=720");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
   return (
@@ -1799,7 +1841,7 @@ function QrModal({ product, onClose }: { product: StudioProduct; onClose: () => 
         <div className="grid w-full grid-cols-2 gap-2">
           <ModalBtn Icon={Download} label="Baixar QR" primary onClick={() => product.qrToken && downloadQr(product.qrToken, `qr-${product.name}`)} />
           <ModalBtn Icon={Copy} label={copied ? "Copiado" : "Copiar link"} onClick={copyLink} />
-          <ModalBtn Icon={Printer} label="Imprimir" onClick={() => window.print()} />
+          <ModalBtn Icon={Printer} label="Imprimir" onClick={printLabel} />
           <ModalBtn Icon={MessageCircle} label="WhatsApp" onClick={() => link && window.open(`https://wa.me/?text=${encodeURIComponent(`Experimente: ${link}`)}`, "_blank")} />
         </div>
       </div>
