@@ -81,6 +81,15 @@ function categoryFor(product: Product): "tops" | "bottoms" {
   return product.category === "inferior" ? "bottoms" : "tops";
 }
 
+function variantPromptFor(kind: ProductVariant["option_kind"] | null): string {
+  switch (kind) {
+    case "color": return "Escolha a cor";
+    case "pattern": return "Escolha a estampa";
+    case "style": return "Escolha o modelo";
+    default: return "Escolha uma opção";
+  }
+}
+
 function Experience({ product, token }: { product: Product; token: string }) {
   const [stage, setStage] = useState<Stage>("intro");
   const [statusLabel, setStatusLabel] = useState("Preparando sua foto…");
@@ -88,14 +97,24 @@ function Experience({ product, token }: { product: Product; token: string }) {
   const [resultImg, setResultImg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [recoverable, setRecoverable] = useState<string | null>(null);
+  const [variantId, setVariantId] = useState<string | null>(product.variants[0]?.id ?? null);
   const inFlight = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const generate = useServerFn(generateTryOnLook);
   const recover = useServerFn(recoverTryOnLook);
 
+  const activeVariant = useMemo(
+    () => product.variants.find((v) => v.id === variantId) ?? null,
+    [product.variants, variantId],
+  );
+  const activeImage = activeVariant?.image || product.image;
+  const activePrice = activeVariant?.price ?? product.price;
+  const activeBuy = activeVariant?.buyUrl || product.buyUrl;
+  const promptKind = product.variants[0]?.option_kind ?? null;
+
   async function runGeneration(modelDataUrl: string) {
-    if (!product.image) {
+    if (!activeImage) {
       setErrorMsg("Esta peça ainda não tem imagem configurada.");
       setStage("error");
       return;
@@ -109,7 +128,7 @@ function Experience({ product, token }: { product: Product; token: string }) {
         data: {
           token,
           model_image: modelDataUrl,
-          garment_image: product.image,
+          garment_image: activeImage,
           category: categoryFor(product),
         },
       });
@@ -118,12 +137,15 @@ function Experience({ product, token }: { product: Product; token: string }) {
       setStage("result");
     } catch (err) {
       const rid = (err as { requestId?: string })?.requestId ?? null;
-      const raw = err instanceof Error ? err.message : "Não foi possível gerar o look.";
+      const raw = err instanceof Error ? err.message : "Não conseguimos gerar o look.";
+      const humane = /fetch|network|failed to fetch/i.test(raw)
+        ? "Não conseguimos iniciar a experimentação. Verifique sua conexão e tente novamente."
+        : raw;
       if (rid) {
         setRecoverable(rid);
-        setErrorMsg("Seu resultado ainda está sendo finalizado. Vamos tentar recuperar sem gerar novamente.");
+        setErrorMsg("Seu resultado ainda está sendo finalizado. Vamos tentar recuperar sem gerar de novo.");
       } else {
-        setErrorMsg(raw === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : raw);
+        setErrorMsg(humane === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : humane);
       }
       setStage("error");
     } finally {
