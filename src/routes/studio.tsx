@@ -673,6 +673,11 @@ function ProductCard({
       <div className="flex items-center justify-between gap-2 p-3">
         <button onClick={onOpen} className="min-w-0 flex-1 text-left">
           <p className="truncate text-[12.5px] font-medium">{product.name}</p>
+          {(product.variantCount > 0 || product.sizeCount > 0) && (
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              {variantSummaryText(product.variantCount, product.sizeCount, product.dominantKind)}
+            </p>
+          )}
         </button>
         <button
           onClick={onQr}
