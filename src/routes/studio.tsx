@@ -9,13 +9,14 @@ import {
   ImageOff, Lock, Pencil, Info, LogOut,
 } from "lucide-react";
 import {
-  bulkCreateProducts, createProduct, deleteProduct, fetchInsights,
+  bulkCreateParsedProducts, createProduct, deleteProduct, fetchInsights,
   fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
   type Product, type ProductInput, type StoreProfile, type StudioCategory,
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
 import { parseSpreadsheetFile, isSupportedSpreadsheet } from "@/lib/spreadsheet";
+import type { ParsedProduct, VariantKind } from "@/lib/csv";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
 const CATEGORY_LABEL: Record<StudioCategory, string> = {
