@@ -219,8 +219,8 @@ function Experience({ product, token }: { product: Product; token: string }) {
     <div className="flex flex-col gap-6 px-5 pb-10 pt-6 fade-in">
       <section className="glass overflow-hidden rounded-3xl">
         <div className="aspect-[4/5] w-full bg-white/[0.04]">
-          {product.image ? (
-            <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+          {activeImage ? (
+            <img src={activeImage} alt={product.name} className="h-full w-full object-contain" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">
               Sem imagem
@@ -230,13 +230,46 @@ function Experience({ product, token }: { product: Product; token: string }) {
         <div className="px-5 py-4">
           <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Você está experimentando</p>
           <h1 className="mt-1 font-display text-[22px] font-semibold tracking-[-0.02em]">{product.name}</h1>
-          {product.price > 0 && (
+          {activeVariant && (
+            <p className="mt-0.5 text-[12px] text-brand/90">{activeVariant.display_name}</p>
+          )}
+          {activePrice > 0 && (
             <p className="mt-1 text-[13px] text-muted-foreground">
-              R$ {product.price.toFixed(2).replace(".", ",")}
+              R$ {activePrice.toFixed(2).replace(".", ",")}
             </p>
           )}
         </div>
       </section>
+
+      {product.variants.length > 1 && stage === "intro" && (
+        <section className="flex flex-col gap-2">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+            {variantPromptFor(promptKind)}
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {product.variants.map((v) => {
+              const active = v.id === variantId;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setVariantId(v.id)}
+                  className={`flex shrink-0 flex-col items-center gap-1 rounded-2xl border p-1.5 transition-all ${
+                    active ? "border-brand bg-brand/10" : "border-white/10 bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="h-14 w-14 overflow-hidden rounded-xl bg-white/[0.04]">
+                    {v.image ? (
+                      <img src={v.image} alt={v.display_name} className="h-full w-full object-cover" />
+                    ) : null}
+                  </div>
+                  <span className="max-w-[64px] truncate text-[10px]">{v.display_name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
 
       {stage === "intro" && (
         <section className="flex flex-col gap-3">
