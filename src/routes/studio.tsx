@@ -40,6 +40,9 @@ export type StudioProduct = {
   status: "pronto" | "revisar" | "sem-imagem";
   stats: { views: number; tryons: number; saves: number; buyClicks: number };
   qrToken?: string;
+  variantCount: number;
+  sizeCount: number;
+  dominantKind: VariantKind | null;
 };
 
 type CatalogRow = {
@@ -51,9 +54,15 @@ type CatalogRow = {
   image?: string;
   buyUrl?: string;
   status: "pronto" | "revisar" | "sem-imagem";
+  variantCount: number;
+  sizeCount: number;
+  source: ParsedProduct;
 };
 
 function toStudioProduct(p: Product, tryons: number): StudioProduct {
+  const sizes = new Set<string>();
+  for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+  const dominantKind = p.variants[0]?.option_kind ?? null;
   return {
     id: p.id,
     name: p.name,
@@ -65,6 +74,9 @@ function toStudioProduct(p: Product, tryons: number): StudioProduct {
     status: p.status,
     stats: { views: tryons, tryons, saves: 0, buyClicks: 0 },
     qrToken: p.qrToken,
+    variantCount: p.variants.length,
+    sizeCount: sizes.size,
+    dominantKind,
   };
 }
 
