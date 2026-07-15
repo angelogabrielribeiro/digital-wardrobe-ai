@@ -1492,16 +1492,23 @@ function ImportModal({
     setProgress(0);
     try {
       const parsed = await parseSpreadsheetFile(file);
-      const catalog: CatalogRow[] = parsed.map((p, idx) => ({
-        id: `row-${idx}-${Date.now()}`,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        sku: p.sku,
-        image: p.image,
-        buyUrl: p.buyUrl,
-        status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
-      }));
+      const catalog: CatalogRow[] = parsed.map((p, idx) => {
+        const sizes = new Set<string>(p.sizes);
+        for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+        return {
+          id: `row-${idx}-${Date.now()}`,
+          name: p.name,
+          category: p.category,
+          price: p.price,
+          sku: p.sku,
+          image: p.image,
+          buyUrl: p.buyUrl,
+          status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
+          variantCount: p.variants.length,
+          sizeCount: sizes.size,
+          source: p,
+        };
+      });
       setRows(catalog);
       setProgress(1);
       await new Promise((r) => setTimeout(r, 400));
