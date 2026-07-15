@@ -1692,8 +1692,6 @@ function ImportModal({
                 </div>
                 <StatusChip status={r.status} />
               </div>
-                <StatusChip status={r.status} />
-              </div>
             ))}
           </div>
           {publishError && (
