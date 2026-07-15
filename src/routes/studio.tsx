@@ -28,6 +28,18 @@ const CATEGORY_LABEL: Record<StudioCategory, string> = {
 };
 const PRO_CATEGORIES: StudioCategory[] = ["calcados", "acessorios"];
 
+function variantSummaryText(count: number, sizes: number, kind?: VariantKind | null): string {
+  if (count <= 0) return sizes > 0 ? `${sizes} tamanhos` : "";
+  const label =
+    kind === "color" ? (count === 1 ? "cor" : "cores")
+      : kind === "pattern" ? (count === 1 ? "estampa" : "estampas")
+      : kind === "style" ? (count === 1 ? "modelo" : "modelos")
+      : count === 1 ? "opção visual" : "opções visuais";
+  const size = sizes > 0 ? ` • ${sizes} tamanho${sizes === 1 ? "" : "s"}` : "";
+  return `${count} ${label}${size}`;
+}
+
+
 // Visual-layer product shape kept for compatibility with existing components.
 export type StudioProduct = {
   id: string;
