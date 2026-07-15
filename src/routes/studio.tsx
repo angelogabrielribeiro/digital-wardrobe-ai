@@ -172,10 +172,7 @@ function StudioApp() {
     setAddOpen(false);
   }
   async function handlePublishImport(rows: CatalogRow[]) {
-    await bulkCreateProducts(rows.map((r) => ({
-      name: r.name, category: r.category, price: r.price,
-      image: r.image, sku: r.sku, buyUrl: r.buyUrl,
-    })));
+    await bulkCreateParsedProducts(rows.map((r) => r.source));
     await qc.invalidateQueries({ queryKey: ["products"] });
     setImportOpen(false);
     setTab("produtos");
