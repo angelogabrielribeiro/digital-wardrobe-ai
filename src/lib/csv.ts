@@ -1,49 +1,59 @@
-import type { ProductInput, StudioCategory } from "./db";
+import type { StudioCategory } from "./db";
 
 /**
- * Minimal CSV parser (handles quoted fields with "" escapes and commas or semicolons).
- * Expected headers (case-insensitive, accents ignored):
- *   nome, categoria, preco, descricao, imagem, sku, buy_url
+ * Flexible catalog importer. Understands:
+ *  - Shopify/Matrixify exports (Handle + Title + Option{1,2,3} Name/Value + Variant Image + Image Src).
+ *  - Generic spreadsheets with aliased headers (nome/produto/title, preco/price, imagem/image src, etc.).
+ *
+ * Produces one ParsedProduct per real product, with visual variants grouped and
+ * sizes consolidated. Never emits one product per size.
  */
-export function parseCsv(text: string): ProductInput[] {
+
+export type VariantKind = "color" | "pattern" | "style" | "visual" | "other";
+
+export type ParsedVariant = {
+  source_option_name?: string;
+  source_option_value?: string;
+  display_name: string;
+  option_kind: VariantKind;
+  image?: string;
+  price?: number;
+  sku?: string;
+  buyUrl?: string;
+  sizes: string[];
+};
+
+export type ParsedProduct = {
+  name: string;
+  category: StudioCategory;
+  price: number;
+  description?: string;
+  image?: string;
+  sku?: string;
+  buyUrl?: string;
+  sizes: string[];
+  variants: ParsedVariant[];
+};
+
+/* ─────────────────────────── CSV lex ─────────────────────────── */
+
+export function parseCsv(text: string): ParsedProduct[] {
   const cleaned = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trim();
   if (!cleaned) return [];
   const delim = detectDelimiter(cleaned);
   const rows = splitRows(cleaned, delim);
   if (rows.length < 2) return [];
   const headers = rows[0].map(normalizeHeader);
-  const idx = (name: string) => headers.indexOf(name);
-  const iName = idx("nome");
-  const iCat = idx("categoria");
-  const iPrice = idx("preco");
-  const iDesc = idx("descricao");
-  const iImg = idx("imagem");
-  const iSku = idx("sku");
-  const iBuy = idx("buy_url");
-
-  const out: ProductInput[] = [];
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r];
-    const name = (iName >= 0 ? row[iName] : row[0] ?? "").trim();
-    if (!name) continue;
-    const price = parsePrice(iPrice >= 0 ? row[iPrice] : "0");
-    out.push({
-      name,
-      category: normalizeCategory(iCat >= 0 ? row[iCat] : ""),
-      price,
-      description: iDesc >= 0 ? row[iDesc]?.trim() || undefined : undefined,
-      image: iImg >= 0 ? row[iImg]?.trim() || undefined : undefined,
-      sku: iSku >= 0 ? row[iSku]?.trim() || undefined : undefined,
-      buyUrl: iBuy >= 0 ? row[iBuy]?.trim() || undefined : undefined,
-    });
-  }
-  return out;
+  const records = rows.slice(1).map((r) => rowToRecord(headers, r));
+  return recordsToProducts(records);
 }
 
 function detectDelimiter(text: string): string {
   const first = text.split("\n", 1)[0];
   const comma = (first.match(/,/g) ?? []).length;
   const semi = (first.match(/;/g) ?? []).length;
+  const tab = (first.match(/\t/g) ?? []).length;
+  if (tab > comma && tab > semi) return "\t";
   return semi > comma ? ";" : ",";
 }
 
@@ -80,6 +90,314 @@ function normalizeHeader(v: string): string {
     .replace(/\s+/g, "_");
 }
 
+type Record = { [key: string]: string };
+
+function rowToRecord(headers: string[], row: string[]): Record {
+  const r: Record = {};
+  for (let i = 0; i < headers.length; i++) {
+    r[headers[i]] = (row[i] ?? "").trim();
+  }
+  return r;
+}
+
+/* ─────────────────────────── Header aliases ─────────────────────────── */
+
+const H = {
+  handle: ["handle", "product_handle", "id", "product_id"],
+  name: ["nome", "produto", "name", "title", "product_title", "product_name"],
+  price: ["preco", "preço", "price", "variant_price", "valor"],
+  image: ["imagem", "image", "image_src", "image_url", "foto", "picture", "photo"],
+  variantImage: ["variant_image", "variant_image_url", "imagem_variante"],
+  link: ["url", "link", "buy_url", "product_url", "link_de_compra", "product_link"],
+  sku: ["sku", "variant_sku", "codigo", "código", "code"],
+  category: ["categoria", "category", "type", "product_type", "tipo"],
+  description: ["descricao", "descrição", "description", "body_(html)", "body_html"],
+  imagePosition: ["image_position"],
+  size: ["tamanho", "size", "asian_size", "eu_size", "us_size"],
+  color: ["cor", "color", "colour", "photo_color"],
+  pattern: ["estampa", "pattern", "print"],
+  style: ["modelo", "style", "design"],
+};
+
+function pick(rec: Record, keys: string[]): string {
+  for (const k of keys) if (rec[k] !== undefined && rec[k] !== "") return rec[k];
+  return "";
+}
+
+/* ─────────────────────────── Records → products ─────────────────────────── */
+
+function recordsToProducts(records: Record[]): ParsedProduct[] {
+  if (records.length === 0) return [];
+  const first = records[0];
+  const hasHandle = H.handle.some((k) => k in first);
+  const hasOption = ["option1_name", "option2_name", "option3_name"].some((k) => k in first);
+
+  if (hasHandle && hasOption) return parseShopify(records);
+  return parseGeneric(records);
+}
+
+/* ─────────────────────────── Shopify / Matrixify ─────────────────────────── */
+
+function parseShopify(records: Record[]): ParsedProduct[] {
+  const groups = new Map<string, Record[]>();
+  let currentHandle = "";
+  for (const rec of records) {
+    const h = pick(rec, H.handle) || currentHandle;
+    if (!h) continue;
+    currentHandle = h;
+    const list = groups.get(h) ?? [];
+    list.push(rec);
+    groups.set(h, list);
+  }
+
+  const products: ParsedProduct[] = [];
+  for (const [handle, group] of groups) {
+    const seed = group.find((r) => pick(r, H.name).trim()) ?? group[0];
+    const name = pick(seed, H.name) || handle;
+    if (!name) continue;
+
+    const mainImage = pickMainImage(group);
+    const category = normalizeCategory(pick(seed, H.category));
+    const description = pick(seed, H.description) || undefined;
+    const buyUrl = pick(seed, H.link) || undefined;
+
+    // Detect which Option{N} is size vs visual.
+    const optionRoles = classifyShopifyOptions(group);
+
+    // Bucket variants by their visual key = combined "visual" option values + variant image.
+    type Bucket = ParsedVariant & { _key: string };
+    const buckets = new Map<string, Bucket>();
+    const productSizes = new Set<string>();
+    let seedPrice = 0;
+    let seedSku: string | undefined;
+
+    for (const rec of group) {
+      const opts = readShopifyOptions(rec);
+      const variantImage = pick(rec, H.variantImage) || undefined;
+      const rowPrice = parsePrice(pick(rec, H.price));
+      const rowSku = pick(rec, H.sku) || undefined;
+
+      // Sizes for this row: any option classified as size + explicit size column.
+      const sizeVals: string[] = [];
+      for (let i = 0; i < opts.length; i++) {
+        if (optionRoles[i] === "size" && opts[i].value) sizeVals.push(opts[i].value);
+      }
+      const explicitSize = pick(rec, H.size);
+      if (explicitSize) sizeVals.push(explicitSize);
+
+      // Visual key = names+values of visual options combined.
+      const visualParts: Array<{ name: string; value: string; kind: VariantKind }> = [];
+      for (let i = 0; i < opts.length; i++) {
+        if (optionRoles[i] === "visual" && opts[i].value) {
+          visualParts.push({
+            name: opts[i].name,
+            value: opts[i].value,
+            kind: guessKindFromName(opts[i].name),
+          });
+        }
+      }
+
+      if (visualParts.length === 0) {
+        // No visual variant — sizes go straight onto the product.
+        for (const s of sizeVals) productSizes.add(s);
+        if (!seedPrice && rowPrice > 0) seedPrice = rowPrice;
+        if (!seedSku && rowSku) seedSku = rowSku;
+        continue;
+      }
+
+      const key = visualParts.map((v) => v.value.toLowerCase()).join("|") + "|" + (variantImage ?? "");
+      const existing = buckets.get(key);
+      const displayName = visualParts.map((v) => v.value).join(" / ");
+      const primary = visualParts[0];
+
+      if (!existing) {
+        buckets.set(key, {
+          _key: key,
+          source_option_name: primary.name,
+          source_option_value: primary.value,
+          display_name: displayName,
+          option_kind: primary.kind,
+          image: variantImage || mainImage,
+          price: rowPrice > 0 ? rowPrice : undefined,
+          sku: rowSku,
+          buyUrl,
+          sizes: [],
+        });
+      }
+      const b = buckets.get(key)!;
+      for (const s of sizeVals) if (!b.sizes.includes(s)) b.sizes.push(s);
+      if (!seedPrice && rowPrice > 0) seedPrice = rowPrice;
+    }
+
+    const variants = Array.from(buckets.values()).map(({ _key, ...v }) => v);
+
+    products.push({
+      name,
+      category,
+      price: seedPrice || parsePrice(pick(seed, H.price)),
+      description,
+      image: mainImage,
+      sku: seedSku,
+      buyUrl,
+      sizes: Array.from(productSizes),
+      variants,
+    });
+  }
+
+  return products;
+}
+
+function pickMainImage(group: Record[]): string | undefined {
+  // Prefer Image Position 1 when present.
+  const withPos = group
+    .map((r) => ({ img: pick(r, H.image), pos: parseInt(pick(r, H.imagePosition), 10) }))
+    .filter((x) => x.img);
+  const pos1 = withPos.find((x) => x.pos === 1);
+  if (pos1) return pos1.img;
+  return withPos[0]?.img || undefined;
+}
+
+type ShopifyOption = { name: string; value: string };
+
+function readShopifyOptions(rec: Record): ShopifyOption[] {
+  const out: ShopifyOption[] = [];
+  for (const i of [1, 2, 3]) {
+    const name = rec[`option${i}_name`] ?? "";
+    const value = rec[`option${i}_value`] ?? "";
+    if (name || value) out.push({ name: name.trim(), value: value.trim() });
+  }
+  return out;
+}
+
+/**
+ * Decide whether each Option{N} column is a size or a visual option.
+ * Priority:
+ *  1) Option name matches a known size keyword → size.
+ *  2) Option name matches a known visual keyword → visual.
+ *  3) Values look like sizes AND no image varies with the option → size.
+ *  4) Default → visual (safer: treats unknown codes like 1/2/3 as visuals).
+ */
+function classifyShopifyOptions(group: Record[]): Array<"size" | "visual"> {
+  const roles: Array<"size" | "visual"> = ["visual", "visual", "visual"];
+  for (const i of [0, 1, 2]) {
+    const nameSample = group.find((r) => (r[`option${i + 1}_name`] ?? "").trim())?.[
+      `option${i + 1}_name`
+    ] ?? "";
+    const n = normalizeText(nameSample);
+    if (!n) { roles[i] = "visual"; continue; }
+    if (isSizeName(n)) { roles[i] = "size"; continue; }
+    if (isVisualName(n)) { roles[i] = "visual"; continue; }
+
+    const values = group.map((r) => (r[`option${i + 1}_value`] ?? "").trim()).filter(Boolean);
+    const uniq = Array.from(new Set(values));
+    const allSize = uniq.length > 0 && uniq.every((v) => looksLikeSize(v));
+    const imagesVary = new Set(group.map((r) => pick(r, H.variantImage))).size > 1;
+    roles[i] = allSize && !imagesVary ? "size" : "visual";
+  }
+  return roles;
+}
+
+/* ─────────────────────────── Generic (non-Shopify) ─────────────────────────── */
+
+function parseGeneric(records: Record[]): ParsedProduct[] {
+  const out: ParsedProduct[] = [];
+  for (const rec of records) {
+    const name = pick(rec, H.name).trim();
+    if (!name) continue;
+    const price = parsePrice(pick(rec, H.price));
+    const image = pick(rec, H.image) || undefined;
+    const sku = pick(rec, H.sku) || undefined;
+    const buyUrl = pick(rec, H.link) || undefined;
+
+    // Optional single visual variant column present?
+    const colorVal = pick(rec, H.color);
+    const patternVal = pick(rec, H.pattern);
+    const styleVal = pick(rec, H.style);
+    const sizeVal = pick(rec, H.size);
+    const variants: ParsedVariant[] = [];
+    if (colorVal) variants.push(makeVariant("Cor", colorVal, "color", image));
+    else if (patternVal) variants.push(makeVariant("Estampa", patternVal, "pattern", image));
+    else if (styleVal) variants.push(makeVariant("Modelo", styleVal, "style", image));
+
+    out.push({
+      name,
+      category: normalizeCategory(pick(rec, H.category)),
+      price,
+      description: pick(rec, H.description) || undefined,
+      image,
+      sku,
+      buyUrl,
+      sizes: sizeVal ? [sizeVal] : [],
+      variants,
+    });
+  }
+  // Consolidate: same name+category → merge sizes/variants.
+  const merged = new Map<string, ParsedProduct>();
+  for (const p of out) {
+    const key = `${p.name}::${p.category}`;
+    const cur = merged.get(key);
+    if (!cur) { merged.set(key, p); continue; }
+    for (const s of p.sizes) if (!cur.sizes.includes(s)) cur.sizes.push(s);
+    for (const v of p.variants) {
+      const dupe = cur.variants.find((x) => x.display_name.toLowerCase() === v.display_name.toLowerCase());
+      if (!dupe) cur.variants.push(v);
+    }
+    if (!cur.image && p.image) cur.image = p.image;
+    if (!cur.price && p.price) cur.price = p.price;
+  }
+  return Array.from(merged.values());
+}
+
+function makeVariant(name: string, value: string, kind: VariantKind, image?: string): ParsedVariant {
+  return {
+    source_option_name: name,
+    source_option_value: value,
+    display_name: value,
+    option_kind: kind,
+    image,
+    sizes: [],
+  };
+}
+
+/* ─────────────────────────── Helpers ─────────────────────────── */
+
+function normalizeText(v: string): string {
+  return v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function guessKindFromName(name: string): VariantKind {
+  const n = normalizeText(name);
+  if (/(cor|color|colour)/.test(n)) return "color";
+  if (/(estampa|pattern|print)/.test(n)) return "pattern";
+  if (/(modelo|style|design)/.test(n)) return "style";
+  return "visual";
+}
+
+function isSizeName(n: string): boolean {
+  return /(tamanho|size|talla|talle)/.test(n);
+}
+function isVisualName(n: string): boolean {
+  return /(cor|color|colour|estampa|pattern|print|modelo|style|design|photo)/.test(n);
+}
+
+const SIZE_TOKENS = new Set([
+  "pp", "p", "m", "g", "gg", "ggg",
+  "xs", "s", "l", "xl", "xxl", "3xl", "4xl", "5xl",
+  "unico", "único", "one size", "onesize", "u",
+]);
+
+function looksLikeSize(v: string): boolean {
+  const n = normalizeText(v);
+  if (SIZE_TOKENS.has(n)) return true;
+  if (/^\d{2}$/.test(n)) {
+    const num = parseInt(n, 10);
+    if (num >= 28 && num <= 60) return true;
+  }
+  if (/^(eu|us|br)\s?\d+$/.test(n)) return true;
+  if (/^asian\s?size/.test(n)) return true;
+  return false;
+}
+
 function parsePrice(v: string | undefined): number {
   if (!v) return 0;
   const cleaned = v.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
@@ -88,10 +406,10 @@ function parsePrice(v: string | undefined): number {
 }
 
 function normalizeCategory(v: string): StudioCategory {
-  const n = v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (["inferior", "calca", "bermuda", "saia", "short"].some((k) => n.includes(k))) return "inferior";
-  if (["vestido", "macacao", "peca-unica", "peca_unica", "peca"].some((k) => n.includes(k))) return "peca-unica";
-  if (["tenis", "sapato", "calcado"].some((k) => n.includes(k))) return "calcados";
-  if (["bolsa", "acessor"].some((k) => n.includes(k))) return "acessorios";
+  const n = normalizeText(v);
+  if (["inferior", "calca", "bermuda", "saia", "short", "pants", "shorts", "skirt"].some((k) => n.includes(k))) return "inferior";
+  if (["vestido", "macacao", "peca-unica", "peca_unica", "dress", "jumpsuit"].some((k) => n.includes(k))) return "peca-unica";
+  if (["tenis", "sapato", "calcado", "shoes", "sneaker"].some((k) => n.includes(k))) return "calcados";
+  if (["bolsa", "acessor", "bag", "accessor"].some((k) => n.includes(k))) return "acessorios";
   return "superior";
 }
