@@ -68,6 +68,65 @@ export type Database = {
           },
         ]
       }
+      product_variants: {
+        Row: {
+          buy_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+          image_url: string | null
+          option_kind: string
+          price: number | null
+          product_id: string
+          sizes: Json
+          sku: string | null
+          sort_order: number
+          source_option_name: string | null
+          source_option_value: string | null
+          updated_at: string
+        }
+        Insert: {
+          buy_url?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          image_url?: string | null
+          option_kind?: string
+          price?: number | null
+          product_id: string
+          sizes?: Json
+          sku?: string | null
+          sort_order?: number
+          source_option_name?: string | null
+          source_option_value?: string | null
+          updated_at?: string
+        }
+        Update: {
+          buy_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          image_url?: string | null
+          option_kind?: string
+          price?: number | null
+          product_id?: string
+          sizes?: Json
+          sku?: string | null
+          sort_order?: number
+          source_option_name?: string | null
+          source_option_value?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           buy_url: string | null
@@ -239,7 +298,21 @@ export type Database = {
           updated_at: string
         }[]
       }
-      log_experiment_by_token: { Args: { _token: string }; Returns: undefined }
+      get_variants_by_token: {
+        Args: { _token: string }
+        Returns: {
+          buy_url: string
+          display_name: string
+          id: string
+          image_url: string
+          option_kind: string
+          price: number
+          product_id: string
+          sizes: Json
+          sku: string
+          sort_order: number
+        }[]
+      }
       owns_product: { Args: { _product_id: string }; Returns: boolean }
     }
     Enums: {
