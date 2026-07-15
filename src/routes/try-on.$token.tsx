@@ -1,9 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Camera, Sparkles, Upload, RotateCcw, ShoppingBag, RefreshCw } from "lucide-react";
-import { fetchProductByToken, type Product } from "@/lib/db";
+import { fetchProductByToken, type Product, type ProductVariant } from "@/lib/db";
 import { generateTryOnLook, recoverTryOnLook } from "@/lib/tryon.functions";
 
 export const Route = createFileRoute("/try-on/$token")({
@@ -81,6 +81,15 @@ function categoryFor(product: Product): "tops" | "bottoms" {
   return product.category === "inferior" ? "bottoms" : "tops";
 }
 
+function variantPromptFor(kind: ProductVariant["option_kind"] | null): string {
+  switch (kind) {
+    case "color": return "Escolha a cor";
+    case "pattern": return "Escolha a estampa";
+    case "style": return "Escolha o modelo";
+    default: return "Escolha uma opção";
+  }
+}
+
 function Experience({ product, token }: { product: Product; token: string }) {
   const [stage, setStage] = useState<Stage>("intro");
   const [statusLabel, setStatusLabel] = useState("Preparando sua foto…");
@@ -88,14 +97,24 @@ function Experience({ product, token }: { product: Product; token: string }) {
   const [resultImg, setResultImg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [recoverable, setRecoverable] = useState<string | null>(null);
+  const [variantId, setVariantId] = useState<string | null>(product.variants[0]?.id ?? null);
   const inFlight = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const generate = useServerFn(generateTryOnLook);
   const recover = useServerFn(recoverTryOnLook);
 
+  const activeVariant = useMemo(
+    () => product.variants.find((v) => v.id === variantId) ?? null,
+    [product.variants, variantId],
+  );
+  const activeImage = activeVariant?.image || product.image;
+  const activePrice = activeVariant?.price ?? product.price;
+  const activeBuy = activeVariant?.buyUrl || product.buyUrl;
+  const promptKind = product.variants[0]?.option_kind ?? null;
+
   async function runGeneration(modelDataUrl: string) {
-    if (!product.image) {
+    if (!activeImage) {
       setErrorMsg("Esta peça ainda não tem imagem configurada.");
       setStage("error");
       return;
@@ -109,7 +128,7 @@ function Experience({ product, token }: { product: Product; token: string }) {
         data: {
           token,
           model_image: modelDataUrl,
-          garment_image: product.image,
+          garment_image: activeImage,
           category: categoryFor(product),
         },
       });
@@ -118,12 +137,15 @@ function Experience({ product, token }: { product: Product; token: string }) {
       setStage("result");
     } catch (err) {
       const rid = (err as { requestId?: string })?.requestId ?? null;
-      const raw = err instanceof Error ? err.message : "Não foi possível gerar o look.";
+      const raw = err instanceof Error ? err.message : "Não conseguimos gerar o look.";
+      const humane = /fetch|network|failed to fetch/i.test(raw)
+        ? "Não conseguimos iniciar a experimentação. Verifique sua conexão e tente novamente."
+        : raw;
       if (rid) {
         setRecoverable(rid);
-        setErrorMsg("Seu resultado ainda está sendo finalizado. Vamos tentar recuperar sem gerar novamente.");
+        setErrorMsg("Seu resultado ainda está sendo finalizado. Vamos tentar recuperar sem gerar de novo.");
       } else {
-        setErrorMsg(raw === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : raw);
+        setErrorMsg(humane === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : humane);
       }
       setStage("error");
     } finally {
@@ -197,8 +219,8 @@ function Experience({ product, token }: { product: Product; token: string }) {
     <div className="flex flex-col gap-6 px-5 pb-10 pt-6 fade-in">
       <section className="glass overflow-hidden rounded-3xl">
         <div className="aspect-[4/5] w-full bg-white/[0.04]">
-          {product.image ? (
-            <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+          {activeImage ? (
+            <img src={activeImage} alt={product.name} className="h-full w-full object-contain" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">
               Sem imagem
@@ -208,13 +230,46 @@ function Experience({ product, token }: { product: Product; token: string }) {
         <div className="px-5 py-4">
           <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Você está experimentando</p>
           <h1 className="mt-1 font-display text-[22px] font-semibold tracking-[-0.02em]">{product.name}</h1>
-          {product.price > 0 && (
+          {activeVariant && (
+            <p className="mt-0.5 text-[12px] text-brand/90">{activeVariant.display_name}</p>
+          )}
+          {activePrice > 0 && (
             <p className="mt-1 text-[13px] text-muted-foreground">
-              R$ {product.price.toFixed(2).replace(".", ",")}
+              R$ {activePrice.toFixed(2).replace(".", ",")}
             </p>
           )}
         </div>
       </section>
+
+      {product.variants.length > 1 && stage === "intro" && (
+        <section className="flex flex-col gap-2">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+            {variantPromptFor(promptKind)}
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {product.variants.map((v) => {
+              const active = v.id === variantId;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setVariantId(v.id)}
+                  className={`flex shrink-0 flex-col items-center gap-1 rounded-2xl border p-1.5 transition-all ${
+                    active ? "border-brand bg-brand/10" : "border-white/10 bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="h-14 w-14 overflow-hidden rounded-xl bg-white/[0.04]">
+                    {v.image ? (
+                      <img src={v.image} alt={v.display_name} className="h-full w-full object-cover" />
+                    ) : null}
+                  </div>
+                  <span className="max-w-[64px] truncate text-[10px]">{v.display_name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
 
       {stage === "intro" && (
         <section className="flex flex-col gap-3">
@@ -304,9 +359,9 @@ function Experience({ product, token }: { product: Product; token: string }) {
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Nova foto
             </button>
-            {product.buyUrl ? (
+            {activeBuy ? (
               <a
-                href={product.buyUrl}
+                href={activeBuy}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99]"

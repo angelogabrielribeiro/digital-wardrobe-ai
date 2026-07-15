@@ -1,13 +1,11 @@
 import * as XLSX from "xlsx";
-import { parseCsv } from "./csv";
-import type { ProductInput } from "./db";
+import { parseCsv, type ParsedProduct } from "./csv";
 
 /**
- * Lê um arquivo enviado pelo lojista (Excel .xlsx/.xls ou CSV) e devolve
- * a lista de produtos normalizada. Excel é convertido para CSV via SheetJS
- * e reutiliza o mesmo parser (mesmos cabeçalhos, mesma normalização).
+ * Lê planilha (Excel .xlsx/.xls/.xlsm ou CSV) e devolve produtos já
+ * agrupados com variantes visuais e tamanhos consolidados.
  */
-export async function parseSpreadsheetFile(file: File): Promise<ProductInput[]> {
+export async function parseSpreadsheetFile(file: File): Promise<ParsedProduct[]> {
   const name = file.name.toLowerCase();
   const isExcel =
     name.endsWith(".xlsx") ||
@@ -30,7 +28,10 @@ export async function parseSpreadsheetFile(file: File): Promise<ProductInput[]> 
   return parseCsv(text);
 }
 
+const MAX_FILE_BYTES = 12 * 1024 * 1024;
+
 export function isSupportedSpreadsheet(file: File): boolean {
+  if (file.size > MAX_FILE_BYTES) return false;
   const n = file.name.toLowerCase();
   return (
     n.endsWith(".csv") ||

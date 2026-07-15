@@ -9,13 +9,14 @@ import {
   ImageOff, Lock, Pencil, Info, LogOut,
 } from "lucide-react";
 import {
-  bulkCreateProducts, createProduct, deleteProduct, fetchInsights,
+  bulkCreateParsedProducts, createProduct, deleteProduct, fetchInsights,
   fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
   type Product, type ProductInput, type StoreProfile, type StudioCategory,
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
 import { parseSpreadsheetFile, isSupportedSpreadsheet } from "@/lib/spreadsheet";
+import type { ParsedProduct, VariantKind } from "@/lib/csv";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
 const CATEGORY_LABEL: Record<StudioCategory, string> = {
@@ -26,6 +27,18 @@ const CATEGORY_LABEL: Record<StudioCategory, string> = {
   acessorios: "Acessórios",
 };
 const PRO_CATEGORIES: StudioCategory[] = ["calcados", "acessorios"];
+
+function variantSummaryText(count: number, sizes: number, kind?: VariantKind | null): string {
+  if (count <= 0) return sizes > 0 ? `${sizes} tamanhos` : "";
+  const label =
+    kind === "color" ? (count === 1 ? "cor" : "cores")
+      : kind === "pattern" ? (count === 1 ? "estampa" : "estampas")
+      : kind === "style" ? (count === 1 ? "modelo" : "modelos")
+      : count === 1 ? "opção visual" : "opções visuais";
+  const size = sizes > 0 ? ` • ${sizes} tamanho${sizes === 1 ? "" : "s"}` : "";
+  return `${count} ${label}${size}`;
+}
+
 
 // Visual-layer product shape kept for compatibility with existing components.
 export type StudioProduct = {
@@ -39,6 +52,9 @@ export type StudioProduct = {
   status: "pronto" | "revisar" | "sem-imagem";
   stats: { views: number; tryons: number; saves: number; buyClicks: number };
   qrToken?: string;
+  variantCount: number;
+  sizeCount: number;
+  dominantKind: VariantKind | null;
 };
 
 type CatalogRow = {
@@ -50,9 +66,15 @@ type CatalogRow = {
   image?: string;
   buyUrl?: string;
   status: "pronto" | "revisar" | "sem-imagem";
+  variantCount: number;
+  sizeCount: number;
+  source: ParsedProduct;
 };
 
 function toStudioProduct(p: Product, tryons: number): StudioProduct {
+  const sizes = new Set<string>();
+  for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+  const dominantKind = p.variants[0]?.option_kind ?? null;
   return {
     id: p.id,
     name: p.name,
@@ -64,6 +86,9 @@ function toStudioProduct(p: Product, tryons: number): StudioProduct {
     status: p.status,
     stats: { views: tryons, tryons, saves: 0, buyClicks: 0 },
     qrToken: p.qrToken,
+    variantCount: p.variants.length,
+    sizeCount: sizes.size,
+    dominantKind,
   };
 }
 
@@ -159,10 +184,7 @@ function StudioApp() {
     setAddOpen(false);
   }
   async function handlePublishImport(rows: CatalogRow[]) {
-    await bulkCreateProducts(rows.map((r) => ({
-      name: r.name, category: r.category, price: r.price,
-      image: r.image, sku: r.sku, buyUrl: r.buyUrl,
-    })));
+    await bulkCreateParsedProducts(rows.map((r) => r.source));
     await qc.invalidateQueries({ queryKey: ["products"] });
     setImportOpen(false);
     setTab("produtos");
@@ -651,6 +673,11 @@ function ProductCard({
       <div className="flex items-center justify-between gap-2 p-3">
         <button onClick={onOpen} className="min-w-0 flex-1 text-left">
           <p className="truncate text-[12.5px] font-medium">{product.name}</p>
+          {(product.variantCount > 0 || product.sizeCount > 0) && (
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              {variantSummaryText(product.variantCount, product.sizeCount, product.dominantKind)}
+            </p>
+          )}
         </button>
         <button
           onClick={onQr}
@@ -1482,16 +1509,23 @@ function ImportModal({
     setProgress(0);
     try {
       const parsed = await parseSpreadsheetFile(file);
-      const catalog: CatalogRow[] = parsed.map((p, idx) => ({
-        id: `row-${idx}-${Date.now()}`,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        sku: p.sku,
-        image: p.image,
-        buyUrl: p.buyUrl,
-        status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
-      }));
+      const catalog: CatalogRow[] = parsed.map((p, idx) => {
+        const sizes = new Set<string>(p.sizes);
+        for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+        return {
+          id: `row-${idx}-${Date.now()}`,
+          name: p.name,
+          category: p.category,
+          price: p.price,
+          sku: p.sku,
+          image: p.image,
+          buyUrl: p.buyUrl,
+          status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
+          variantCount: p.variants.length,
+          sizeCount: sizes.size,
+          source: p,
+        };
+      });
       setRows(catalog);
       setProgress(1);
       await new Promise((r) => setTimeout(r, 400));
@@ -1643,7 +1677,9 @@ function ImportModal({
           <div>
             <p className="text-[13px] font-medium">Revisar catálogo</p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              {rows.length} produtos encontrados. Confirme antes de publicar.
+              Encontramos {rows.length} produto{rows.length === 1 ? "" : "s"}.{" "}
+              {rows.filter((r) => r.status === "pronto").length} estão prontos.{" "}
+              {rows.filter((r) => r.status !== "pronto").length} precisam de atenção.
             </p>
           </div>
           <div className="flex max-h-[42vh] flex-col gap-2 overflow-y-auto">
@@ -1667,6 +1703,8 @@ function ImportModal({
                   <p className="truncate text-[12.5px] font-medium">{r.name}</p>
                   <p className="text-[10.5px] text-muted-foreground">
                     {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
+                    {r.variantCount > 0 && ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
+                    {r.variantCount === 0 && r.sizeCount > 0 && ` · ${r.sizeCount} tamanhos`}
                   </p>
                 </div>
                 <StatusChip status={r.status} />
