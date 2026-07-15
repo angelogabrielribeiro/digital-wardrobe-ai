@@ -359,9 +359,9 @@ function Experience({ product, token }: { product: Product; token: string }) {
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Nova foto
             </button>
-            {product.buyUrl ? (
+            {activeBuy ? (
               <a
-                href={product.buyUrl}
+                href={activeBuy}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-[12.5px] font-medium text-white transition-transform active:scale-[0.99]"
