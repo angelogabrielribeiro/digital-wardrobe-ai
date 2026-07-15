@@ -1660,7 +1660,9 @@ function ImportModal({
           <div>
             <p className="text-[13px] font-medium">Revisar catálogo</p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              {rows.length} produtos encontrados. Confirme antes de publicar.
+              Encontramos {rows.length} produto{rows.length === 1 ? "" : "s"}.{" "}
+              {rows.filter((r) => r.status === "pronto").length} estão prontos.{" "}
+              {rows.filter((r) => r.status !== "pronto").length} precisam de atenção.
             </p>
           </div>
           <div className="flex max-h-[42vh] flex-col gap-2 overflow-y-auto">
@@ -1684,8 +1686,12 @@ function ImportModal({
                   <p className="truncate text-[12.5px] font-medium">{r.name}</p>
                   <p className="text-[10.5px] text-muted-foreground">
                     {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
+                    {r.variantCount > 0 && ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
+                    {r.variantCount === 0 && r.sizeCount > 0 && ` · ${r.sizeCount} tamanhos`}
                   </p>
                 </div>
+                <StatusChip status={r.status} />
+              </div>
                 <StatusChip status={r.status} />
               </div>
             ))}
