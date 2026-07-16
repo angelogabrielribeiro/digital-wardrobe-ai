@@ -10,6 +10,20 @@ import type { StudioCategory } from "./db";
  */
 
 export type VariantKind = "color" | "pattern" | "style" | "visual" | "other";
+export type OptionRole = "size" | "visual" | "ignore";
+
+/** Override map keyed by NORMALIZED option name (lowercased, no accents). */
+export type OptionRoleOverrides = Record<string, { role: OptionRole; kind?: VariantKind }>;
+
+export type OptionQuestion = {
+  /** Original display name of the option. */
+  name: string;
+  normalizedName: string;
+  values: Array<{ value: string; image?: string }>;
+  suggestedRole: OptionRole;
+  suggestedKind: VariantKind;
+  imagesVary: boolean;
+};
 
 export type ParsedVariant = {
   source_option_name?: string;
@@ -37,15 +51,20 @@ export type ParsedProduct = {
 
 /* ─────────────────────────── CSV lex ─────────────────────────── */
 
-export function parseCsv(text: string): ParsedProduct[] {
+export function parseCsv(text: string, overrides?: OptionRoleOverrides): ParsedProduct[] {
+  const records = parseCsvToRecords(text);
+  return productsFromRecords(records, overrides);
+}
+
+/** Public: convert raw CSV text to normalized records (header-keyed). */
+export function parseCsvToRecords(text: string): CsvRecord[] {
   const cleaned = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trim();
   if (!cleaned) return [];
   const delim = detectDelimiter(cleaned);
   const rows = splitRows(cleaned, delim);
   if (rows.length < 2) return [];
   const headers = rows[0].map(normalizeHeader);
-  const records = rows.slice(1).map((r) => rowToRecord(headers, r));
-  return recordsToProducts(records);
+  return rows.slice(1).map((r) => rowToRecord(headers, r));
 }
 
 function detectDelimiter(text: string): string {
@@ -90,10 +109,10 @@ function normalizeHeader(v: string): string {
     .replace(/\s+/g, "_");
 }
 
-type Record = { [key: string]: string };
+export type CsvRecord = { [key: string]: string };
 
-function rowToRecord(headers: string[], row: string[]): Record {
-  const r: Record = {};
+function rowToRecord(headers: string[], row: string[]): CsvRecord {
+  const r: CsvRecord = {};
   for (let i = 0; i < headers.length; i++) {
     r[headers[i]] = (row[i] ?? "").trim();
   }
@@ -119,27 +138,104 @@ const H = {
   style: ["modelo", "style", "design"],
 };
 
-function pick(rec: Record, keys: string[]): string {
+/** Known product-related headers for sheet-scoring. */
+export const RECOGNIZED_HEADERS = new Set<string>([
+  ...H.handle, ...H.name, ...H.price, ...H.image, ...H.variantImage,
+  ...H.link, ...H.sku, ...H.category, ...H.description,
+  ...H.size, ...H.color, ...H.pattern, ...H.style,
+  "option1_name", "option1_value", "option2_name", "option2_value", "option3_name", "option3_value",
+]);
+
+/** Score a header row by how many recognized product-headers it contains. */
+export function scoreHeaders(headers: string[]): number {
+  let s = 0;
+  for (const h of headers) if (RECOGNIZED_HEADERS.has(normalizeHeader(h))) s++;
+  return s;
+}
+
+function pick(rec: CsvRecord, keys: string[]): string {
   for (const k of keys) if (rec[k] !== undefined && rec[k] !== "") return rec[k];
   return "";
 }
 
 /* ─────────────────────────── Records → products ─────────────────────────── */
 
-function recordsToProducts(records: Record[]): ParsedProduct[] {
+export function productsFromRecords(
+  records: CsvRecord[],
+  overrides?: OptionRoleOverrides,
+): ParsedProduct[] {
   if (records.length === 0) return [];
   const first = records[0];
   const hasHandle = H.handle.some((k) => k in first);
   const hasOption = ["option1_name", "option2_name", "option3_name"].some((k) => k in first);
 
-  if (hasHandle && hasOption) return parseShopify(records);
+  if (hasHandle && hasOption) return parseShopify(records, overrides ?? {});
   return parseGeneric(records);
+}
+
+/**
+ * Detect Option{N} columns whose role is unclear (name doesn't obviously mean
+ * "size" or "color/pattern/style/photo"). One question per option NAME (not per
+ * option index) so we don't ask twice for the same column across products.
+ */
+export function detectOptionQuestions(records: CsvRecord[]): OptionQuestion[] {
+  if (records.length === 0) return [];
+  const first = records[0];
+  const hasOption = ["option1_name", "option2_name", "option3_name"].some((k) => k in first);
+  if (!hasOption) return [];
+
+  // group rows by handle so we can decide "images vary" per product
+  const groupsByName = new Map<string, {
+    original: string;
+    values: Map<string, string | undefined>; // value → image (last seen)
+    imagesVary: boolean;
+    _imgs: Set<string>;
+  }>();
+
+  for (const rec of records) {
+    for (const i of [1, 2, 3]) {
+      const rawName = (rec[`option${i}_name`] ?? "").trim();
+      const value = (rec[`option${i}_value`] ?? "").trim();
+      if (!rawName || !value) continue;
+      const n = normalizeText(rawName);
+      // Skip clearly-named options.
+      if (isSizeName(n) || isVisualName(n)) continue;
+      const img = pick(rec, H.variantImage) || undefined;
+      let g = groupsByName.get(n);
+      if (!g) {
+        g = { original: rawName, values: new Map(), imagesVary: false, _imgs: new Set() };
+        groupsByName.set(n, g);
+      }
+      if (!g.values.has(value)) g.values.set(value, img);
+      if (img) g._imgs.add(img);
+    }
+  }
+
+  const out: OptionQuestion[] = [];
+  for (const [n, g] of groupsByName) {
+    // If overrides already set for this name we don't ask.
+    const values = Array.from(g.values.entries()).map(([value, image]) => ({ value, image }));
+    const imagesVary = g._imgs.size > 1;
+    // Suggest: images vary → likely a visual (color); otherwise size only when values look size-y.
+    const allSizeLike = values.length > 0 && values.every((v) => looksLikeSize(v.value));
+    const suggestedRole: OptionRole = imagesVary ? "visual" : (allSizeLike ? "size" : "visual");
+    const suggestedKind: VariantKind = imagesVary ? "color" : "visual";
+    out.push({
+      name: g.original,
+      normalizedName: n,
+      values,
+      suggestedRole,
+      suggestedKind,
+      imagesVary,
+    });
+  }
+  return out;
 }
 
 /* ─────────────────────────── Shopify / Matrixify ─────────────────────────── */
 
-function parseShopify(records: Record[]): ParsedProduct[] {
-  const groups = new Map<string, Record[]>();
+function parseShopify(records: CsvRecord[], overrides: OptionRoleOverrides): ParsedProduct[] {
+  const groups = new Map<string, CsvRecord[]>();
   let currentHandle = "";
   for (const rec of records) {
     const h = pick(rec, H.handle) || currentHandle;
@@ -161,10 +257,9 @@ function parseShopify(records: Record[]): ParsedProduct[] {
     const description = pick(seed, H.description) || undefined;
     const buyUrl = pick(seed, H.link) || undefined;
 
-    // Detect which Option{N} is size vs visual.
-    const optionRoles = classifyShopifyOptions(group);
+    // Decide role of each Option{N} column for this handle (applies overrides).
+    const optionRoles = classifyShopifyOptions(group, overrides);
 
-    // Bucket variants by their visual key = combined "visual" option values + variant image.
     type Bucket = ParsedVariant & { _key: string };
     const buckets = new Map<string, Bucket>();
     const productSizes = new Set<string>();
@@ -177,28 +272,27 @@ function parseShopify(records: Record[]): ParsedProduct[] {
       const rowPrice = parsePrice(pick(rec, H.price));
       const rowSku = pick(rec, H.sku) || undefined;
 
-      // Sizes for this row: any option classified as size + explicit size column.
+      // Sizes for this row.
       const sizeVals: string[] = [];
       for (let i = 0; i < opts.length; i++) {
-        if (optionRoles[i] === "size" && opts[i].value) sizeVals.push(opts[i].value);
+        if (optionRoles[i]?.role === "size" && opts[i].value) sizeVals.push(opts[i].value);
       }
       const explicitSize = pick(rec, H.size);
       if (explicitSize) sizeVals.push(explicitSize);
 
-      // Visual key = names+values of visual options combined.
+      // Visual key.
       const visualParts: Array<{ name: string; value: string; kind: VariantKind }> = [];
       for (let i = 0; i < opts.length; i++) {
-        if (optionRoles[i] === "visual" && opts[i].value) {
+        if (optionRoles[i]?.role === "visual" && opts[i].value) {
           visualParts.push({
             name: opts[i].name,
             value: opts[i].value,
-            kind: guessKindFromName(opts[i].name),
+            kind: optionRoles[i]?.kind ?? guessKindFromName(opts[i].name),
           });
         }
       }
 
       if (visualParts.length === 0) {
-        // No visual variant — sizes go straight onto the product.
         for (const s of sizeVals) productSizes.add(s);
         if (!seedPrice && rowPrice > 0) seedPrice = rowPrice;
         if (!seedSku && rowSku) seedSku = rowSku;
@@ -247,8 +341,7 @@ function parseShopify(records: Record[]): ParsedProduct[] {
   return products;
 }
 
-function pickMainImage(group: Record[]): string | undefined {
-  // Prefer Image Position 1 when present.
+function pickMainImage(group: CsvRecord[]): string | undefined {
   const withPos = group
     .map((r) => ({ img: pick(r, H.image), pos: parseInt(pick(r, H.imagePosition), 10) }))
     .filter((x) => x.img);
@@ -259,7 +352,7 @@ function pickMainImage(group: Record[]): string | undefined {
 
 type ShopifyOption = { name: string; value: string };
 
-function readShopifyOptions(rec: Record): ShopifyOption[] {
+function readShopifyOptions(rec: CsvRecord): ShopifyOption[] {
   const out: ShopifyOption[] = [];
   for (const i of [1, 2, 3]) {
     const name = rec[`option${i}_name`] ?? "";
@@ -269,37 +362,42 @@ function readShopifyOptions(rec: Record): ShopifyOption[] {
   return out;
 }
 
+type Role = { role: OptionRole; kind?: VariantKind };
+
 /**
- * Decide whether each Option{N} column is a size or a visual option.
  * Priority:
- *  1) Option name matches a known size keyword → size.
- *  2) Option name matches a known visual keyword → visual.
- *  3) Values look like sizes AND no image varies with the option → size.
- *  4) Default → visual (safer: treats unknown codes like 1/2/3 as visuals).
+ *  1) User override by option name → wins.
+ *  2) Option name matches a known size keyword → size.
+ *  3) Option name matches a known visual keyword → visual (kind inferred).
+ *  4) Values look like sizes AND no image varies with the option → size.
+ *  5) Default → visual.
  */
-function classifyShopifyOptions(group: Record[]): Array<"size" | "visual"> {
-  const roles: Array<"size" | "visual"> = ["visual", "visual", "visual"];
+function classifyShopifyOptions(group: CsvRecord[], overrides: OptionRoleOverrides): Array<Role> {
+  const roles: Array<Role> = [{ role: "visual" }, { role: "visual" }, { role: "visual" }];
   for (const i of [0, 1, 2]) {
-    const nameSample = group.find((r) => (r[`option${i + 1}_name`] ?? "").trim())?.[
-      `option${i + 1}_name`
-    ] ?? "";
+    const nameSample =
+      group.find((r) => (r[`option${i + 1}_name`] ?? "").trim())?.[`option${i + 1}_name`] ?? "";
     const n = normalizeText(nameSample);
-    if (!n) { roles[i] = "visual"; continue; }
-    if (isSizeName(n)) { roles[i] = "size"; continue; }
-    if (isVisualName(n)) { roles[i] = "visual"; continue; }
+    if (!n) { roles[i] = { role: "visual" }; continue; }
+
+    const override = overrides[n];
+    if (override) { roles[i] = { role: override.role, kind: override.kind }; continue; }
+
+    if (isSizeName(n)) { roles[i] = { role: "size" }; continue; }
+    if (isVisualName(n)) { roles[i] = { role: "visual", kind: guessKindFromName(n) }; continue; }
 
     const values = group.map((r) => (r[`option${i + 1}_value`] ?? "").trim()).filter(Boolean);
     const uniq = Array.from(new Set(values));
     const allSize = uniq.length > 0 && uniq.every((v) => looksLikeSize(v));
     const imagesVary = new Set(group.map((r) => pick(r, H.variantImage))).size > 1;
-    roles[i] = allSize && !imagesVary ? "size" : "visual";
+    roles[i] = { role: allSize && !imagesVary ? "size" : "visual" };
   }
   return roles;
 }
 
 /* ─────────────────────────── Generic (non-Shopify) ─────────────────────────── */
 
-function parseGeneric(records: Record[]): ParsedProduct[] {
+function parseGeneric(records: CsvRecord[]): ParsedProduct[] {
   const out: ParsedProduct[] = [];
   for (const rec of records) {
     const name = pick(rec, H.name).trim();
@@ -309,7 +407,6 @@ function parseGeneric(records: Record[]): ParsedProduct[] {
     const sku = pick(rec, H.sku) || undefined;
     const buyUrl = pick(rec, H.link) || undefined;
 
-    // Optional single visual variant column present?
     const colorVal = pick(rec, H.color);
     const patternVal = pick(rec, H.pattern);
     const styleVal = pick(rec, H.style);
@@ -331,7 +428,6 @@ function parseGeneric(records: Record[]): ParsedProduct[] {
       variants,
     });
   }
-  // Consolidate: same name+category → merge sizes/variants.
   const merged = new Map<string, ParsedProduct>();
   for (const p of out) {
     const key = `${p.name}::${p.category}`;

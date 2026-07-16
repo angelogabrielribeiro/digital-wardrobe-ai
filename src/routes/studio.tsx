@@ -10,13 +10,17 @@ import {
 } from "lucide-react";
 import {
   bulkCreateParsedProducts, createProduct, deleteProduct, fetchInsights,
-  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
-  type Product, type ProductInput, type StoreProfile, type StudioCategory,
+  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct, updateVariant,
+  type Product, type ProductInput, type ProductVariant, type StoreProfile, type StudioCategory,
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
-import { parseSpreadsheetFile, isSupportedSpreadsheet } from "@/lib/spreadsheet";
-import type { ParsedProduct, VariantKind } from "@/lib/csv";
+import {
+  readSpreadsheet, buildProducts, isSupportedSpreadsheet, SpreadsheetError,
+} from "@/lib/spreadsheet";
+import type {
+  ParsedProduct, ParsedVariant, VariantKind, OptionQuestion, OptionRoleOverrides, OptionRole, CsvRecord,
+} from "@/lib/csv";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
 const CATEGORY_LABEL: Record<StudioCategory, string> = {
@@ -730,17 +734,20 @@ function ProductDetailModal({
   onClose: () => void;
   onQr: () => void;
 }) {
+  const qc = useQueryClient();
+  const productsQuery = useQuery({ queryKey: ["products"], queryFn: fetchMyProducts });
+  const fullProduct = useMemo(
+    () => (productsQuery.data ?? []).find((p) => p.id === product.id) ?? null,
+    [productsQuery.data, product.id],
+  );
+
   return (
     <Modal onClose={onClose} title={product.name}>
       <div className="flex flex-col gap-4">
         <div className="glass overflow-hidden rounded-2xl">
           <div className="relative aspect-[4/3] bg-white/[0.03]">
             {product.image ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="h-full w-full object-cover"
-              />
+              <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <ImageOff className="h-8 w-8 text-white/30" strokeWidth={1.4} />
@@ -758,9 +765,7 @@ function ProductDetailModal({
             </p>
           </div>
           <div className="glass rounded-2xl p-3.5">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              Categoria
-            </p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Categoria</p>
             <p className="mt-1.5 text-[13px] font-medium">{CATEGORY_LABEL[product.category]}</p>
           </div>
         </div>
@@ -772,19 +777,34 @@ function ProductDetailModal({
           >
             <QrCode className="h-3.5 w-3.5" strokeWidth={1.8} /> QR Code
           </button>
-          <button
-            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
-          >
+          <button className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]">
             <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} /> Editar
           </button>
         </div>
 
+        {fullProduct && fullProduct.variants.length > 0 && (
+          <div className="glass rounded-2xl p-4">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Opções da peça
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {fullProduct.variants.map((v) => (
+                <SavedVariantEditor
+                  key={v.id}
+                  variant={v}
+                  onSaved={async () => {
+                    await qc.invalidateQueries({ queryKey: ["products"] });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="glass rounded-2xl p-4">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              Informações
-            </p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Informações</p>
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
             <dt className="text-muted-foreground">SKU</dt>
@@ -792,12 +812,7 @@ function ProductDetailModal({
             <dt className="text-muted-foreground">Link de compra</dt>
             <dd className="truncate text-right">
               {product.buyUrl ? (
-                <a
-                  href={product.buyUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-brand hover:underline"
-                >
+                <a href={product.buyUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                   Abrir
                 </a>
               ) : (
@@ -812,6 +827,135 @@ function ProductDetailModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function SavedVariantEditor({
+  variant,
+  onSaved,
+}: {
+  variant: ProductVariant;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [displayName, setDisplayName] = useState(variant.display_name);
+  const [kind, setKind] = useState<VariantKind>(variant.option_kind);
+  const [image, setImage] = useState<string>(variant.image ?? "");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const dirty =
+    displayName !== variant.display_name ||
+    kind !== variant.option_kind ||
+    (image || "") !== (variant.image ?? "");
+
+  async function handleFile(f: File) {
+    setErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(f);
+      setImage(url);
+    } catch (e: any) {
+      setErr(e?.message ?? "Falha ao enviar imagem da variante.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateVariant(variant.id, {
+        display_name: displayName,
+        option_kind: kind,
+        image: image || null,
+      });
+      await onSaved();
+    } catch (e: any) {
+      setErr(e?.message ?? "Falha ao salvar variante.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
+      <div className="flex items-start gap-2.5">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-white/[0.05]">
+          {image ? (
+            <img src={image} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageOff className="h-3 w-3 text-white/30" strokeWidth={1.5} />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="w-full rounded-md bg-white/[0.04] px-2 py-1 text-[12px] outline-none"
+          />
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {KIND_CHOICES.map((c) => {
+              const active = kind === c.kind;
+              return (
+                <button
+                  key={c.kind}
+                  onClick={() => setKind(c.kind)}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    active ? "border-brand bg-brand/15 text-brand" : "border-white/10 text-muted-foreground"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10.5px] hover:bg-white/[0.06] disabled:opacity-60"
+        >
+          {uploading ? "Enviando…" : image ? "Trocar foto" : "Enviar foto"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+        <input
+          value={image}
+          onChange={(e) => setImage(e.target.value)}
+          placeholder="ou cole uma URL"
+          className="flex-1 rounded-md bg-white/[0.03] px-2 py-1 text-[11px] outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+      {variant.sizes.length > 0 && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          Tamanhos: {variant.sizes.join(", ")}
+        </p>
+      )}
+      {err && <p className="mt-1 text-[10.5px] text-red-300">{err}</p>}
+      {dirty && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded-full bg-brand px-3 py-1 text-[11px] font-medium text-white active:scale-[0.98] disabled:opacity-60"
+          >
+            {saving ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1476,7 +1620,15 @@ function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => vo
 }
 
 /* ─────────────────────────── Import modal ─────────────────────────── */
-type ImportStep = "upload" | "analyzing" | "issues" | "review";
+type ImportStep = "upload" | "analyzing" | "options" | "issues" | "review";
+
+const ANALYZE_MESSAGES = [
+  "Lendo sua planilha…",
+  "Encontrando seus produtos…",
+  "Organizando opções e tamanhos…",
+  "Preparando para você conferir…",
+];
+
 function ImportModal({
   onClose,
   onPublish,
@@ -1491,6 +1643,10 @@ function ImportModal({
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [records, setRecords] = useState<CsvRecord[]>([]);
+  const [questions, setQuestions] = useState<OptionQuestion[]>([]);
+  const [overrides, setOverrides] = useState<OptionRoleOverrides>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const issues = useMemo(() => {
@@ -1499,48 +1655,105 @@ function ImportModal({
     return { noImage, badPrice, unknownCat: 0 };
   }, [rows]);
 
+  function catalogFromParsed(parsed: ParsedProduct[]): CatalogRow[] {
+    return parsed.map((p, idx) => {
+      const sizes = new Set<string>(p.sizes);
+      for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+      return {
+        id: `row-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: p.name,
+        category: p.category,
+        price: p.price,
+        sku: p.sku,
+        image: p.image,
+        buyUrl: p.buyUrl,
+        status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
+        variantCount: p.variants.length,
+        sizeCount: sizes.size,
+        source: p,
+      };
+    });
+  }
+
+  function finalizeCatalog(built: ParsedProduct[]) {
+    const catalog = catalogFromParsed(built);
+    setRows(catalog);
+    if (catalog.length === 0) {
+      setFileError("Nenhum produto encontrado no arquivo.");
+      setStep("upload");
+      return;
+    }
+    const hasIssues = catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
+    setStep(hasIssues ? "issues" : "review");
+  }
+
   async function beginAnalysis(file: File) {
     setFileError(null);
+    setOverrides({});
+    setQuestions([]);
+    setRecords([]);
     if (!isSupportedSpreadsheet(file)) {
-      setFileError("Envie uma planilha do Excel (.xlsx) ou um arquivo .csv.");
+      setFileError(
+        file.size > 12 * 1024 * 1024
+          ? "Este arquivo passa de 12 MB. Reduza a planilha ou divida em dois arquivos."
+          : "Envie uma planilha do Excel (.xlsx) ou um arquivo .csv.",
+      );
       return;
     }
     setStep("analyzing");
     setProgress(0);
     try {
-      const parsed = await parseSpreadsheetFile(file);
-      const catalog: CatalogRow[] = parsed.map((p, idx) => {
-        const sizes = new Set<string>(p.sizes);
-        for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
-        return {
-          id: `row-${idx}-${Date.now()}`,
-          name: p.name,
-          category: p.category,
-          price: p.price,
-          sku: p.sku,
-          image: p.image,
-          buyUrl: p.buyUrl,
-          status: p.image && p.image.trim() ? (p.price > 0 ? "pronto" : "revisar") : "sem-imagem",
-          variantCount: p.variants.length,
-          sizeCount: sizes.size,
-          source: p,
-        };
-      });
-      setRows(catalog);
+      // Step 1 — reading
+      await new Promise((r) => setTimeout(r, 200));
       setProgress(1);
-      await new Promise((r) => setTimeout(r, 400));
+      const read = await readSpreadsheet(file);
+      setRecords(read.records);
       setProgress(2);
-      await new Promise((r) => setTimeout(r, 300));
-      const hasIssues = catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
-      setStep(catalog.length === 0 ? "upload" : hasIssues ? "issues" : "review");
-      if (catalog.length === 0) setFileError("Nenhum produto encontrado no arquivo.");
+      await new Promise((r) => setTimeout(r, 200));
+      setProgress(3);
+
+      if (read.questions.length > 0) {
+        setQuestions(read.questions);
+        setStep("options");
+        return;
+      }
+      const built = buildProducts(read.records);
+      finalizeCatalog(built);
     } catch (err) {
-      console.error(err);
-      setFileError("Não conseguimos ler este arquivo. Verifique se é uma planilha válida.");
+      if (err instanceof SpreadsheetError) {
+        setFileError(err.message);
+      } else {
+        console.error(err);
+        setFileError("Não conseguimos ler este arquivo. Verifique se é uma planilha válida.");
+      }
       setStep("upload");
     }
   }
 
+  function applyOverridesAndBuild(next: OptionRoleOverrides) {
+    setOverrides(next);
+    const built = buildProducts(records, next);
+    finalizeCatalog(built);
+  }
+
+  function updateRowSource(rowId: string, mut: (p: ParsedProduct) => ParsedProduct) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        const p = mut(r.source);
+        const sizes = new Set<string>(p.sizes);
+        for (const v of p.variants) for (const s of v.sizes) sizes.add(s);
+        return {
+          ...r,
+          name: p.name,
+          image: p.image,
+          source: p,
+          variantCount: p.variants.length,
+          sizeCount: sizes.size,
+        };
+      }),
+    );
+  }
 
   return (
     <Modal onClose={onClose} title="Importar catálogo">
@@ -1551,10 +1764,7 @@ function ImportModal({
           </p>
           <button
             onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => {
               e.preventDefault();
@@ -1562,7 +1772,7 @@ function ImportModal({
               const f = e.dataTransfer.files?.[0];
               if (f) beginAnalysis(f);
             }}
-            className={`glass flex flex-col items-center justify-center gap-3 rounded-3xl border-dashed py-12 transition-all ${
+            className={`glass relative flex flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-dashed py-12 transition-all ${
               dragOver ? "border-brand/60 bg-brand/[0.06]" : "hover:border-white/[0.14]"
             }`}
           >
@@ -1574,12 +1784,8 @@ function ImportModal({
               <p className="mt-1 text-[11.5px] text-muted-foreground">ou selecionar arquivo</p>
             </div>
             <div className="flex gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
-                Excel
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
-                CSV
-              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">Excel</span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">CSV</span>
             </div>
           </button>
           <input
@@ -1592,39 +1798,45 @@ function ImportModal({
               if (f) beginAnalysis(f);
             }}
           />
-
           {fileError && (
             <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
               {fileError}
             </p>
           )}
           <p className="text-center text-[10.5px] text-muted-foreground">
-            Cabeçalhos aceitos: nome, categoria, preco, descricao, imagem, sku, buy_url
+            Aceitamos planilhas do Excel e arquivos CSV. Até 12 MB e 5.000 linhas por importação.
           </p>
         </div>
       )}
 
-
       {step === "analyzing" && (
         <div className="flex flex-col items-center gap-4 py-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
-            <Sparkles className="h-5 w-5 animate-pulse text-brand" strokeWidth={1.7} />
+          <div className="glass relative flex h-24 w-full items-center justify-center overflow-hidden rounded-2xl">
+            <div className="scan-line" style={{ top: 0 }} />
+            <Sparkles className="h-6 w-6 text-brand pulse-soft" strokeWidth={1.6} />
           </div>
           <div className="text-center">
-            <p className="text-[14px] font-medium">
-              {["Analisando planilha…", "Identificando produtos…", "Organizando catálogo…"][
-                progress
-              ] ?? "Organizando catálogo…"}
+            <p className="crossfade text-[14px] font-medium" key={progress}>
+              {ANALYZE_MESSAGES[Math.min(progress, ANALYZE_MESSAGES.length - 1)]}
             </p>
             <p className="mt-1 text-[11.5px] text-muted-foreground">Isso leva alguns segundos.</p>
           </div>
           <div className="h-1 w-40 overflow-hidden rounded-full bg-white/[0.05]">
             <div
               className="h-full bg-gradient-to-r from-brand to-[#8f88ff] transition-all"
-              style={{ width: `${((progress + 1) / 3) * 100}%` }}
+              style={{ width: `${((progress + 1) / ANALYZE_MESSAGES.length) * 100}%` }}
             />
           </div>
         </div>
+      )}
+
+      {step === "options" && (
+        <OptionQuestions
+          questions={questions}
+          initial={overrides}
+          onCancel={onClose}
+          onConfirm={applyOverridesAndBuild}
+        />
       )}
 
       {step === "issues" && (
@@ -1638,21 +1850,9 @@ function ImportModal({
             </p>
           </div>
           <ul className="flex flex-col gap-2">
-            <IssueRow
-              label="produtos sem imagem"
-              count={issues.noImage}
-              tone={issues.noImage ? "warn" : "ok"}
-            />
-            <IssueRow
-              label="preços inválidos"
-              count={issues.badPrice}
-              tone={issues.badPrice ? "warn" : "ok"}
-            />
-            <IssueRow
-              label="categorias desconhecidas"
-              count={issues.unknownCat}
-              tone={issues.unknownCat ? "warn" : "ok"}
-            />
+            <IssueRow label="produtos sem imagem" count={issues.noImage} tone={issues.noImage ? "warn" : "ok"} />
+            <IssueRow label="preços inválidos" count={issues.badPrice} tone={issues.badPrice ? "warn" : "ok"} />
+            <IssueRow label="categorias desconhecidas" count={issues.unknownCat} tone={issues.unknownCat ? "warn" : "ok"} />
           </ul>
           <div className="flex flex-col gap-2 pt-1">
             <button
@@ -1660,13 +1860,7 @@ function ImportModal({
               className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
             >
               <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} />
-              Corrigir automaticamente
-            </button>
-            <button
-              onClick={() => setStep("review")}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12.5px] font-medium hover:bg-white/[0.06]"
-            >
-              Revisar manualmente
+              Continuar
             </button>
           </div>
         </div>
@@ -1678,38 +1872,70 @@ function ImportModal({
             <p className="text-[13px] font-medium">Revisar catálogo</p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
               Encontramos {rows.length} produto{rows.length === 1 ? "" : "s"}.{" "}
-              {rows.filter((r) => r.status === "pronto").length} estão prontos.{" "}
+              {rows.filter((r) => r.status === "pronto").length} prontos.{" "}
               {rows.filter((r) => r.status !== "pronto").length} precisam de atenção.
             </p>
           </div>
-          <div className="flex max-h-[42vh] flex-col gap-2 overflow-y-auto">
-            {rows.map((r) => (
-              <div key={r.id} className="glass flex items-center gap-3 rounded-2xl p-3">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
-                  {r.image ? (
-                    <img
-                      src={r.image}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <ImageOff className="h-3.5 w-3.5 text-white/30" strokeWidth={1.5} />
+          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto">
+            {rows.map((r) => {
+              const isOpen = expanded.has(r.id);
+              return (
+                <div key={r.id} className="glass rounded-2xl p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
+                      {r.image ? (
+                        <img src={r.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <ImageOff className="h-3.5 w-3.5 text-white/30" strokeWidth={1.5} />
+                        </div>
+                      )}
                     </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12.5px] font-medium">{r.name}</p>
+                      <p className="text-[10.5px] text-muted-foreground">
+                        {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
+                        {r.variantCount > 0 && ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
+                        {r.variantCount === 0 && r.sizeCount > 0 && ` · ${r.sizeCount} tamanhos`}
+                      </p>
+                    </div>
+                    <StatusChip status={r.status} />
+                  </div>
+                  {r.variantCount > 0 && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setExpanded((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(r.id)) next.delete(r.id); else next.add(r.id);
+                            return next;
+                          });
+                        }}
+                        className="mt-2 text-left text-[11px] text-brand/90 hover:text-brand"
+                      >
+                        {isOpen ? "Ocultar opções da peça" : "Opções da peça"}
+                      </button>
+                      {isOpen && (
+                        <div className="mt-2 flex flex-col gap-2">
+                          {r.source.variants.map((v, idx) => (
+                            <ParsedVariantEditor
+                              key={`${r.id}-v-${idx}`}
+                              variant={v}
+                              onChange={(nv) =>
+                                updateRowSource(r.id, (p) => ({
+                                  ...p,
+                                  variants: p.variants.map((x, i) => (i === idx ? nv : x)),
+                                }))
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-medium">{r.name}</p>
-                  <p className="text-[10.5px] text-muted-foreground">
-                    {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
-                    {r.variantCount > 0 && ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
-                    {r.variantCount === 0 && r.sizeCount > 0 && ` · ${r.sizeCount} tamanhos`}
-                  </p>
-                </div>
-                <StatusChip status={r.status} />
-              </div>
-            ))}
+              );
+            })}
           </div>
           {publishError && (
             <p className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-300">
@@ -1763,6 +1989,232 @@ function ImportModal({
     </Modal>
   );
 }
+
+/* ─────────────────────────── Option questions ─────────────────────────── */
+
+const ROLE_CHOICES: Array<{ label: string; role: OptionRole; kind?: VariantKind }> = [
+  { label: "Cor", role: "visual", kind: "color" },
+  { label: "Estampa", role: "visual", kind: "pattern" },
+  { label: "Modelo", role: "visual", kind: "style" },
+  { label: "Outra opção", role: "visual", kind: "visual" },
+  { label: "Tamanho", role: "size" },
+  { label: "Ignorar", role: "ignore" },
+];
+
+function OptionQuestions({
+  questions,
+  initial,
+  onCancel,
+  onConfirm,
+}: {
+  questions: OptionQuestion[];
+  initial: OptionRoleOverrides;
+  onCancel: () => void;
+  onConfirm: (overrides: OptionRoleOverrides) => void;
+}) {
+  const [choices, setChoices] = useState<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    for (const q of questions) {
+      const existing = initial[q.normalizedName];
+      const idx = existing
+        ? ROLE_CHOICES.findIndex((c) => c.role === existing.role && c.kind === existing.kind)
+        : ROLE_CHOICES.findIndex((c) => c.role === q.suggestedRole && (q.suggestedRole === "size" || c.kind === q.suggestedKind));
+      out[q.normalizedName] = idx >= 0 ? idx : 3;
+    }
+    return out;
+  });
+
+  function confirm() {
+    const overrides: OptionRoleOverrides = { ...initial };
+    for (const q of questions) {
+      const c = ROLE_CHOICES[choices[q.normalizedName] ?? 3];
+      overrides[q.normalizedName] = { role: c.role, kind: c.kind };
+    }
+    onConfirm(overrides);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="text-[14px] font-medium">Confirme as informações</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          Encontramos sua planilha, mas algumas opções precisam de confirmação.
+        </p>
+      </div>
+      <div className="flex max-h-[50vh] flex-col gap-4 overflow-y-auto">
+        {questions.map((q) => {
+          const chosen = choices[q.normalizedName] ?? 3;
+          const preview = q.values.slice(0, 4);
+          return (
+            <div key={q.normalizedName} className="glass rounded-2xl p-3">
+              <p className="text-[12.5px] font-medium">
+                Encontramos a opção “{q.name}” com {q.values.length} alternativa
+                {q.values.length === 1 ? "" : "s"}.
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Como deseja mostrar aos clientes?
+              </p>
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {preview.map((v, i) => (
+                  <div key={i} className="flex shrink-0 flex-col items-center gap-1">
+                    <div className="h-12 w-12 overflow-hidden rounded-lg bg-white/[0.04]">
+                      {v.image ? (
+                        <img src={v.image} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                          {v.value.slice(0, 2)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="max-w-[52px] truncate text-[10px] text-muted-foreground">
+                      {v.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {ROLE_CHOICES.map((c, i) => {
+                  const active = chosen === i;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setChoices((prev) => ({ ...prev, [q.normalizedName]: i }))}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        active
+                          ? "border-brand bg-brand/15 text-brand"
+                          : "border-white/10 bg-white/[0.02] text-muted-foreground hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={confirm}
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-[12px] font-medium text-white active:scale-[0.98]"
+        >
+          Continuar
+          <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── ParsedVariant editor (import) ─────────────────────────── */
+
+const KIND_CHOICES: Array<{ label: string; kind: VariantKind }> = [
+  { label: "Cor", kind: "color" },
+  { label: "Estampa", kind: "pattern" },
+  { label: "Modelo", kind: "style" },
+  { label: "Outra opção", kind: "visual" },
+];
+
+function ParsedVariantEditor({
+  variant,
+  onChange,
+}: {
+  variant: ParsedVariant;
+  onChange: (v: ParsedVariant) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(f: File) {
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(f);
+      onChange({ ...variant, image: url });
+    } catch (e: any) {
+      setUploadErr(e?.message ?? "Falha no upload.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
+      <div className="flex items-start gap-2.5">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-white/[0.05]">
+          {variant.image ? (
+            <img src={variant.image} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageOff className="h-3 w-3 text-white/30" strokeWidth={1.5} />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <input
+            value={variant.display_name}
+            onChange={(e) => onChange({ ...variant, display_name: e.target.value })}
+            className="w-full rounded-md bg-white/[0.04] px-2 py-1 text-[12px] outline-none"
+            placeholder="Nome exibido"
+          />
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {KIND_CHOICES.map((c) => {
+              const active = variant.option_kind === c.kind;
+              return (
+                <button
+                  key={c.kind}
+                  onClick={() => onChange({ ...variant, option_kind: c.kind })}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    active ? "border-brand bg-brand/15 text-brand" : "border-white/10 text-muted-foreground"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10.5px] hover:bg-white/[0.06] disabled:opacity-60"
+        >
+          {uploading ? "Enviando…" : variant.image ? "Trocar foto" : "Enviar foto"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+        <input
+          value={variant.image ?? ""}
+          onChange={(e) => onChange({ ...variant, image: e.target.value })}
+          placeholder="ou cole uma URL"
+          className="flex-1 rounded-md bg-white/[0.03] px-2 py-1 text-[11px] outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+      {variant.sizes.length > 0 && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          Tamanhos: {variant.sizes.join(", ")}
+        </p>
+      )}
+      {uploadErr && <p className="mt-1 text-[10.5px] text-red-300">{uploadErr}</p>}
+    </div>
+  );
+}
+
 
 function IssueRow({
   label,
