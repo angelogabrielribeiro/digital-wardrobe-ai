@@ -220,7 +220,12 @@ function Experience({ product, token }: { product: Product; token: string }) {
       <section className="glass overflow-hidden rounded-3xl">
         <div className="aspect-[4/5] w-full bg-white/[0.04]">
           {activeImage ? (
-            <img src={activeImage} alt={product.name} className="h-full w-full object-contain" />
+            <img
+              key={activeImage}
+              src={activeImage}
+              alt={product.name}
+              className="crossfade h-full w-full object-contain"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">
               Sem imagem
