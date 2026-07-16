@@ -10,13 +10,17 @@ import {
 } from "lucide-react";
 import {
   bulkCreateParsedProducts, createProduct, deleteProduct, fetchInsights,
-  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct,
-  type Product, type ProductInput, type StoreProfile, type StudioCategory,
+  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct, updateVariant,
+  type Product, type ProductInput, type ProductVariant, type StoreProfile, type StudioCategory,
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
-import { parseSpreadsheetFile, isSupportedSpreadsheet } from "@/lib/spreadsheet";
-import type { ParsedProduct, VariantKind } from "@/lib/csv";
+import {
+  readSpreadsheet, buildProducts, isSupportedSpreadsheet, SpreadsheetError,
+} from "@/lib/spreadsheet";
+import type {
+  ParsedProduct, ParsedVariant, VariantKind, OptionQuestion, OptionRoleOverrides, OptionRole, CsvRecord,
+} from "@/lib/csv";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
 const CATEGORY_LABEL: Record<StudioCategory, string> = {
