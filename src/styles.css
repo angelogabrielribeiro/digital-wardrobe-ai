@@ -193,3 +193,39 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   background-size: 200px 200px;
 }
+
+@keyframes scan-sweep {
+  0% { transform: translateY(-120%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(120%); opacity: 0; }
+}
+
+@utility scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(141,103,255,0.75), transparent);
+  filter: blur(1px);
+  animation: scan-sweep 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes crossfade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@utility crossfade {
+  animation: crossfade-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-line { animation: none; opacity: 0.4; }
+  .crossfade { animation: none; }
+  .pulse-soft { animation: none; }
+  .fade-up { animation: none; }
+  .fade-in { animation: none; }
+  .shimmer-overlay { animation: none; }
+}
