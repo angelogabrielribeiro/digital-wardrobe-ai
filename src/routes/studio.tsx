@@ -734,17 +734,20 @@ function ProductDetailModal({
   onClose: () => void;
   onQr: () => void;
 }) {
+  const qc = useQueryClient();
+  const productsQuery = useQuery({ queryKey: ["products"], queryFn: fetchMyProducts });
+  const fullProduct = useMemo(
+    () => (productsQuery.data ?? []).find((p) => p.id === product.id) ?? null,
+    [productsQuery.data, product.id],
+  );
+
   return (
     <Modal onClose={onClose} title={product.name}>
       <div className="flex flex-col gap-4">
         <div className="glass overflow-hidden rounded-2xl">
           <div className="relative aspect-[4/3] bg-white/[0.03]">
             {product.image ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="h-full w-full object-cover"
-              />
+              <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <ImageOff className="h-8 w-8 text-white/30" strokeWidth={1.4} />
@@ -762,9 +765,7 @@ function ProductDetailModal({
             </p>
           </div>
           <div className="glass rounded-2xl p-3.5">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              Categoria
-            </p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Categoria</p>
             <p className="mt-1.5 text-[13px] font-medium">{CATEGORY_LABEL[product.category]}</p>
           </div>
         </div>
@@ -776,19 +777,34 @@ function ProductDetailModal({
           >
             <QrCode className="h-3.5 w-3.5" strokeWidth={1.8} /> QR Code
           </button>
-          <button
-            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]"
-          >
+          <button className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[12px] font-medium hover:bg-white/[0.06]">
             <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} /> Editar
           </button>
         </div>
 
+        {fullProduct && fullProduct.variants.length > 0 && (
+          <div className="glass rounded-2xl p-4">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Opções da peça
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {fullProduct.variants.map((v) => (
+                <SavedVariantEditor
+                  key={v.id}
+                  variant={v}
+                  onSaved={async () => {
+                    await qc.invalidateQueries({ queryKey: ["products"] });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="glass rounded-2xl p-4">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              Informações
-            </p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Informações</p>
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
             <dt className="text-muted-foreground">SKU</dt>
@@ -796,12 +812,7 @@ function ProductDetailModal({
             <dt className="text-muted-foreground">Link de compra</dt>
             <dd className="truncate text-right">
               {product.buyUrl ? (
-                <a
-                  href={product.buyUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-brand hover:underline"
-                >
+                <a href={product.buyUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                   Abrir
                 </a>
               ) : (
@@ -816,6 +827,135 @@ function ProductDetailModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function SavedVariantEditor({
+  variant,
+  onSaved,
+}: {
+  variant: ProductVariant;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [displayName, setDisplayName] = useState(variant.display_name);
+  const [kind, setKind] = useState<VariantKind>(variant.option_kind);
+  const [image, setImage] = useState<string>(variant.image ?? "");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const dirty =
+    displayName !== variant.display_name ||
+    kind !== variant.option_kind ||
+    (image || "") !== (variant.image ?? "");
+
+  async function handleFile(f: File) {
+    setErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(f);
+      setImage(url);
+    } catch (e: any) {
+      setErr(e?.message ?? "Falha ao enviar imagem da variante.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateVariant(variant.id, {
+        display_name: displayName,
+        option_kind: kind,
+        image: image || null,
+      });
+      await onSaved();
+    } catch (e: any) {
+      setErr(e?.message ?? "Falha ao salvar variante.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
+      <div className="flex items-start gap-2.5">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-white/[0.05]">
+          {image ? (
+            <img src={image} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageOff className="h-3 w-3 text-white/30" strokeWidth={1.5} />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="w-full rounded-md bg-white/[0.04] px-2 py-1 text-[12px] outline-none"
+          />
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {KIND_CHOICES.map((c) => {
+              const active = kind === c.kind;
+              return (
+                <button
+                  key={c.kind}
+                  onClick={() => setKind(c.kind)}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    active ? "border-brand bg-brand/15 text-brand" : "border-white/10 text-muted-foreground"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10.5px] hover:bg-white/[0.06] disabled:opacity-60"
+        >
+          {uploading ? "Enviando…" : image ? "Trocar foto" : "Enviar foto"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+        <input
+          value={image}
+          onChange={(e) => setImage(e.target.value)}
+          placeholder="ou cole uma URL"
+          className="flex-1 rounded-md bg-white/[0.03] px-2 py-1 text-[11px] outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+      {variant.sizes.length > 0 && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          Tamanhos: {variant.sizes.join(", ")}
+        </p>
+      )}
+      {err && <p className="mt-1 text-[10.5px] text-red-300">{err}</p>}
+      {dirty && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded-full bg-brand px-3 py-1 text-[11px] font-medium text-white active:scale-[0.98] disabled:opacity-60"
+          >
+            {saving ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
