@@ -2,24 +2,71 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Package, QrCode, BarChart3, Store as StoreIcon,
-  ArrowLeft, Upload, FileSpreadsheet, Sparkles, ArrowRight, Plus, Search,
-  Download, Copy, Printer, MessageCircle, X, TrendingUp, Eye, Bookmark,
-  ShoppingBag, Instagram, Globe, MapPin, Phone, Check, AlertTriangle,
-  ImageOff, Lock, Pencil, Info, LogOut,
+  LayoutDashboard,
+  Package,
+  QrCode,
+  BarChart3,
+  Store as StoreIcon,
+  ArrowLeft,
+  Upload,
+  FileSpreadsheet,
+  Sparkles,
+  ArrowRight,
+  Plus,
+  Search,
+  Download,
+  Copy,
+  Printer,
+  MessageCircle,
+  X,
+  TrendingUp,
+  Eye,
+  Bookmark,
+  ShoppingBag,
+  Instagram,
+  Globe,
+  MapPin,
+  Phone,
+  Check,
+  AlertTriangle,
+  ImageOff,
+  Lock,
+  Pencil,
+  Info,
+  LogOut,
 } from "lucide-react";
 import {
-  bulkCreateParsedProducts, createProduct, deleteProduct, fetchInsights,
-  fetchMyProducts, fetchMyStore, updateMyStore, updateProduct, updateVariant,
-  type Product, type ProductInput, type ProductVariant, type StoreProfile, type StudioCategory,
+  bulkCreateParsedProducts,
+  createProduct,
+  deleteProduct,
+  fetchInsights,
+  fetchMyProducts,
+  fetchMyStore,
+  updateMyStore,
+  updateProduct,
+  updateVariant,
+  type Product,
+  type ProductInput,
+  type ProductVariant,
+  type StoreProfile,
+  type StudioCategory,
 } from "@/lib/db";
 import { downloadQr, generateQrDataUrl, tryOnUrl } from "@/lib/qr";
 import { uploadProductImage } from "@/lib/upload";
 import {
-  readSpreadsheet, buildProducts, isSupportedSpreadsheet, SpreadsheetError,
+  readSpreadsheet,
+  buildProducts,
+  isSupportedSpreadsheet,
+  SpreadsheetError,
 } from "@/lib/spreadsheet";
 import type {
-  ParsedProduct, ParsedVariant, VariantKind, OptionQuestion, OptionRoleOverrides, OptionRole, CsvRecord,
+  ParsedProduct,
+  ParsedVariant,
+  VariantKind,
+  OptionQuestion,
+  OptionRoleOverrides,
+  OptionRole,
+  CsvRecord,
 } from "@/lib/csv";
 import { signOut, useAuth } from "@/hooks/use-auth";
 
@@ -35,14 +82,24 @@ const PRO_CATEGORIES: StudioCategory[] = ["calcados", "acessorios"];
 function variantSummaryText(count: number, sizes: number, kind?: VariantKind | null): string {
   if (count <= 0) return sizes > 0 ? `${sizes} tamanhos` : "";
   const label =
-    kind === "color" ? (count === 1 ? "cor" : "cores")
-      : kind === "pattern" ? (count === 1 ? "estampa" : "estampas")
-      : kind === "style" ? (count === 1 ? "modelo" : "modelos")
-      : count === 1 ? "opção visual" : "opções visuais";
+    kind === "color"
+      ? count === 1
+        ? "cor"
+        : "cores"
+      : kind === "pattern"
+        ? count === 1
+          ? "estampa"
+          : "estampas"
+        : kind === "style"
+          ? count === 1
+            ? "modelo"
+            : "modelos"
+          : count === 1
+            ? "opção visual"
+            : "opções visuais";
   const size = sizes > 0 ? ` • ${sizes} tamanho${sizes === 1 ? "" : "s"}` : "";
   return `${count} ${label}${size}`;
 }
-
 
 // Visual-layer product shape kept for compatibility with existing components.
 export type StudioProduct = {
@@ -97,8 +154,6 @@ function toStudioProduct(p: Product, tryons: number): StudioProduct {
 }
 
 // Sem dados mockados — estados vazios até existirem dados reais.
-
-
 
 export const Route = createFileRoute("/studio")({
   head: () => ({
@@ -179,12 +234,14 @@ function StudioApp() {
   // Aguarda o carregamento das consultas antes de decidir entre onboarding e Painel,
   // para não “piscar” o Painel vazio antes do onboarding.
   const storeReady = !productsQuery.isLoading && !storeQuery.isLoading;
-  const showOnboarding =
-    storeReady && !onboardingDismissed && products.length === 0;
+  const showOnboarding = storeReady && !onboardingDismissed && products.length === 0;
 
   async function handleAddProduct(input: ProductInput) {
     await createProduct(input);
-    await Promise.all([qc.invalidateQueries({ queryKey: ["products"] }), qc.invalidateQueries({ queryKey: ["insights"] })]);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["products"] }),
+      qc.invalidateQueries({ queryKey: ["insights"] }),
+    ]);
     setAddOpen(false);
   }
   async function handlePublishImport(rows: CatalogRow[]) {
@@ -195,15 +252,24 @@ function StudioApp() {
   }
 
   if (authLoading || !session) {
-    return <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Carregando…</div>;
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        Carregando…
+      </div>
+    );
   }
 
-
   return (
-    <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-28">
-      <StudioHeader onLogout={async () => { await signOut(); qc.clear(); navigate({ to: "/auth", replace: true }); }} />
+    <div className="studio-shell">
+      <StudioHeader
+        onLogout={async () => {
+          await signOut();
+          qc.clear();
+          navigate({ to: "/auth", replace: true });
+        }}
+      />
 
-      <main className="flex-1">
+      <main className="studio-main">
         {!storeReady ? (
           <div className="flex min-h-[60vh] items-center justify-center px-5 text-center">
             <p className="text-[12.5px] text-muted-foreground">Carregando sua loja…</p>
@@ -217,17 +283,35 @@ function StudioApp() {
         ) : (
           <>
             {tab === "dashboard" && (
-              <Dashboard products={products} onImport={() => setImportOpen(true)} onOpenInterested={() => setInterestedOpen(true)} />
+              <Dashboard
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onOpenInterested={() => setInterestedOpen(true)}
+              />
             )}
             {tab === "produtos" && (
-              <Products products={products} onImport={() => setImportOpen(true)} onAdd={() => setAddOpen(true)}
-                onOpen={(p) => setDetailProduct(p)} onQr={(p) => setQrProduct(p)} />
+              <Products
+                products={products}
+                onImport={() => setImportOpen(true)}
+                onAdd={() => setAddOpen(true)}
+                onOpen={(p) => setDetailProduct(p)}
+                onQr={(p) => setQrProduct(p)}
+              />
             )}
             {tab === "publicacao" && (
-              <PublishPage products={products} channels={channels} onQr={(p) => setQrProduct(p)} onLink={(p) => setLinkProduct(p)} />
+              <PublishPage
+                products={products}
+                channels={channels}
+                onQr={(p) => setQrProduct(p)}
+                onLink={(p) => setLinkProduct(p)}
+              />
             )}
             {tab === "insights" && (
-              <Insights products={products} onPromote={(n) => setPromoteName(n)} onOpenInterested={() => setInterestedOpen(true)} />
+              <Insights
+                products={products}
+                onPromote={(n) => setPromoteName(n)}
+                onOpenInterested={() => setInterestedOpen(true)}
+              />
             )}
             {tab === "loja" && <StorePage store={store} loading={storeQuery.isLoading} />}
           </>
@@ -236,14 +320,25 @@ function StudioApp() {
 
       {storeReady && !showOnboarding && <StudioBottomNav current={tab} onGo={setTab} />}
 
-      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />}
-      {qrProduct && <QrModal product={qrProduct} storeName={store?.nome ?? null} onClose={() => setQrProduct(null)} />}
+      {importOpen && (
+        <ImportModal onClose={() => setImportOpen(false)} onPublish={handlePublishImport} />
+      )}
+      {qrProduct && (
+        <QrModal
+          product={qrProduct}
+          storeName={store?.nome ?? null}
+          onClose={() => setQrProduct(null)}
+        />
+      )}
       {linkProduct && <LinkModal product={linkProduct} onClose={() => setLinkProduct(null)} />}
       {detailProduct && (
         <ProductDetailModal
           product={detailProduct}
           onClose={() => setDetailProduct(null)}
-          onQr={() => { setQrProduct(detailProduct); setDetailProduct(null); }}
+          onQr={() => {
+            setQrProduct(detailProduct);
+            setDetailProduct(null);
+          }}
         />
       )}
       {addOpen && <AddProductModal onClose={() => setAddOpen(false)} onSave={handleAddProduct} />}
@@ -256,16 +351,18 @@ function StudioApp() {
 /* ─────────────────────────── Header ─────────────────────────── */
 function StudioHeader({ onLogout }: { onLogout: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[color:var(--border)] bg-background/80 px-5 py-3.5 backdrop-blur-xl">
-      <Link to="/" className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground">
+    <header className="studio-header">
+      <Link to="/" className="studio-header__link">
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Modo Cliente
       </Link>
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={1.7} />
-        <span className="text-[13px] font-medium tracking-tight">AuraFit Studio</span>
+      <div className="studio-header__brand">
+        <span className="studio-header__monogram">AF</span>
+        <span>
+          AuraFit <em>Studio</em>
+        </span>
       </div>
-      <button onClick={onLogout} className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Sair">
+      <button onClick={onLogout} className="studio-header__link" aria-label="Sair">
         <LogOut className="h-3.5 w-3.5" strokeWidth={1.7} /> Sair
       </button>
     </header>
@@ -313,13 +410,13 @@ function Onboarding({
   ] as const;
 
   return (
-    <div className="flex flex-col gap-8 px-5 pt-10 fade-in">
-      <section>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Bem-vindo
-        </p>
-        <h1 className="mt-2 font-display text-[28px] font-semibold leading-tight tracking-[-0.03em]">
-          Vamos preparar<br />sua loja.
+    <div className="studio-page fade-in">
+      <section className="studio-page__heading">
+        <p className="editorial-kicker">Bem-vindo</p>
+        <h1>
+          Vamos preparar
+          <br />
+          sua loja.
         </h1>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
           Três passos simples para começar a vender com o provador virtual.
@@ -334,9 +431,7 @@ function Onboarding({
           return (
             <li
               key={s.key}
-              className={`glass flex items-start gap-3 rounded-3xl p-5 transition-all ${
-                isCurrent ? "border-brand/40 shadow-[0_0_0_1px_rgba(109,94,248,0.25)]" : ""
-              }`}
+              className={`onboarding-step ${isCurrent ? "onboarding-step--active" : ""}`}
             >
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${
@@ -360,14 +455,9 @@ function Onboarding({
                   </span>
                 </div>
                 <p className="mt-1 text-[14px] font-medium">{s.title}</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                  {s.desc}
-                </p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{s.desc}</p>
                 {isCurrent && (
-                  <button
-                    onClick={s.action}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12px] font-medium text-white transition-transform active:scale-[0.98]"
-                  >
+                  <button onClick={s.action} className="atelier-button mt-3 px-4 py-2 text-[12px]">
                     {s.cta}
                     <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                   </button>
@@ -404,18 +494,16 @@ function Dashboard({
   const hasData = tried > 0 || buys > 0;
 
   return (
-    <div className="flex flex-col gap-8 px-5 pt-8 fade-in">
-      <section>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Sua loja hoje
-        </p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold leading-tight tracking-[-0.03em]">
-          Painel
+    <div className="studio-page fade-in">
+      <section className="studio-page__heading">
+        <p className="editorial-kicker">Sua loja hoje</p>
+        <h1>
+          Painel <em>vivo.</em>
         </h1>
       </section>
 
       {products.length > 0 && (
-        <div className="glass flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4">
+        <div className="studio-ready-note">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
             <Check className="h-4 w-4" strokeWidth={2} />
           </div>
@@ -446,10 +534,7 @@ function Dashboard({
         </div>
       </section>
 
-      <button
-        onClick={onImport}
-        className="glass flex items-center justify-between rounded-3xl p-4 text-left transition-all active:scale-[0.99] hover:border-white/[0.10]"
-      >
+      <button onClick={onImport} className="studio-action-card">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 ring-1 ring-brand/20">
             <Upload className="h-4 w-4 text-brand" strokeWidth={1.7} />
@@ -462,7 +547,7 @@ function Dashboard({
         <ArrowRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
       </button>
 
-      <section className="glass rounded-3xl p-5">
+      <section className="editorial-card p-5">
         <div className="flex items-center justify-between">
           <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
             Clientes interessados
@@ -473,14 +558,15 @@ function Dashboard({
           <>
             <p className="mt-3 text-[15px] leading-snug">
               <span className="font-semibold">{tried.toLocaleString("pt-BR")}</span>{" "}
-              {tried === 1 ? "pessoa experimentou" : "pessoas experimentaram"} uma peça.<br />
+              {tried === 1 ? "pessoa experimentou" : "pessoas experimentaram"} uma peça.
+              <br />
               <span className="text-muted-foreground">
                 {Math.max(0, tried - buys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
               </span>
             </p>
             <button
               onClick={onOpenInterested}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-[12.5px] font-medium text-white transition-transform active:scale-[0.98]"
+              className="atelier-button mt-4 px-4 py-2 text-[12.5px]"
             >
               Criar mensagem de retorno
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -488,7 +574,8 @@ function Dashboard({
           </>
         ) : (
           <p className="mt-3 text-[12.5px] leading-snug text-muted-foreground">
-            Ainda não há dados suficientes. Publique seus primeiros produtos e compartilhe seus QR Codes ou links para começar a acompanhar as experimentações.
+            Ainda não há dados suficientes. Publique seus primeiros produtos e compartilhe seus QR
+            Codes ou links para começar a acompanhar as experimentações.
           </p>
         )}
       </section>
@@ -510,7 +597,7 @@ function BigKpi({
   icon: React.ElementType;
 }) {
   return (
-    <div className="glass rounded-3xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-5">
+    <div className="studio-kpi studio-kpi--hero">
       <div className="flex items-center justify-between">
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">{label}</p>
         <Icon className="h-3.5 w-3.5 text-brand" strokeWidth={1.7} />
@@ -532,7 +619,7 @@ function SmallKpi({
   highlight?: boolean;
 }) {
   return (
-    <div className="glass rounded-2xl p-4">
+    <div className="studio-kpi">
       <div className="flex items-center justify-between">
         <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
         <Icon
@@ -580,31 +667,28 @@ function Products({
   ];
 
   return (
-    <div className="flex flex-col gap-5 px-5 pt-7 fade-in">
-      <header className="flex items-end justify-between">
+    <div className="studio-page fade-in">
+      <header className="studio-page__heading studio-page__heading--actions">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Catálogo</p>
-          <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
-            Produtos
+          <p className="editorial-kicker">Catálogo · acervo</p>
+          <h1>
+            Produtos <em>em cena.</em>
           </h1>
         </div>
         <div className="flex gap-2">
           <button
             onClick={onImport}
-            className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] font-medium transition-colors hover:bg-white/[0.06]"
+            className="atelier-button atelier-button--quiet px-3 py-2 text-[11.5px]"
           >
             Importar
           </button>
-          <button
-            onClick={onAdd}
-            className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-2 text-[11.5px] font-medium text-white transition-transform active:scale-[0.98]"
-          >
+          <button onClick={onAdd} className="atelier-button px-3 py-2 text-[11.5px]">
             <Plus className="h-3.5 w-3.5" strokeWidth={2} /> Adicionar
           </button>
         </div>
       </header>
 
-      <div className="glass flex items-center gap-2 rounded-2xl px-3.5 py-2.5">
+      <div className="archive-field">
         <Search className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
         <input
           value={q}
@@ -634,7 +718,7 @@ function Products({
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="studio-product-grid">
         {filtered.map((p) => (
           <ProductCard key={p.id} product={p} onOpen={() => onOpen(p)} onQr={() => onQr(p)} />
         ))}
@@ -658,7 +742,7 @@ function ProductCard({
   onQr: () => void;
 }) {
   return (
-    <div className="glass overflow-hidden rounded-2xl">
+    <article className="studio-product-card">
       <button onClick={onOpen} className="relative block aspect-[4/5] w-full bg-white/[0.03]">
         {product.image ? (
           <img
@@ -691,7 +775,7 @@ function ProductCard({
           <QrCode className="h-3 w-3" strokeWidth={1.7} /> QR
         </button>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -765,7 +849,9 @@ function ProductDetailModal({
             </p>
           </div>
           <div className="glass rounded-2xl p-3.5">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Categoria</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Categoria
+            </p>
             <p className="mt-1.5 text-[13px] font-medium">{CATEGORY_LABEL[product.category]}</p>
           </div>
         </div>
@@ -804,7 +890,9 @@ function ProductDetailModal({
         <div className="glass rounded-2xl p-4">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Informações</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Informações
+            </p>
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
             <dt className="text-muted-foreground">SKU</dt>
@@ -812,7 +900,12 @@ function ProductDetailModal({
             <dt className="text-muted-foreground">Link de compra</dt>
             <dd className="truncate text-right">
               {product.buyUrl ? (
-                <a href={product.buyUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+                <a
+                  href={product.buyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand hover:underline"
+                >
                   Abrir
                 </a>
               ) : (
@@ -856,8 +949,8 @@ function SavedVariantEditor({
     try {
       const url = await uploadProductImage(f);
       setImage(url);
-    } catch (e: any) {
-      setErr(e?.message ?? "Falha ao enviar imagem da variante.");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Falha ao enviar imagem da variante.");
     } finally {
       setUploading(false);
     }
@@ -873,8 +966,8 @@ function SavedVariantEditor({
         image: image || null,
       });
       await onSaved();
-    } catch (e: any) {
-      setErr(e?.message ?? "Falha ao salvar variante.");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Falha ao salvar variante.");
     } finally {
       setSaving(false);
     }
@@ -906,7 +999,9 @@ function SavedVariantEditor({
                   key={c.kind}
                   onClick={() => setKind(c.kind)}
                   className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                    active ? "border-brand bg-brand/15 text-brand" : "border-white/10 text-muted-foreground"
+                    active
+                      ? "border-brand bg-brand/15 text-brand"
+                      : "border-white/10 text-muted-foreground"
                   }`}
                 >
                   {c.label}
@@ -929,7 +1024,10 @@ function SavedVariantEditor({
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
         />
         <input
           value={image}
@@ -973,7 +1071,7 @@ function PublishPage({
 }) {
   const noChannel = !channels.fisica && !channels.ecommerce;
   return (
-    <div className="flex flex-col gap-5 px-5 pt-7 fade-in">
+    <div className="studio-page fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
           Provador para o cliente
@@ -1132,21 +1230,20 @@ function Insights({
   const hasData = totalTry > 0;
 
   return (
-    <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
+    <div className="studio-page fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
           Últimos 7 dias
         </p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">
-          Insights
-        </h1>
+        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-[-0.03em]">Insights</h1>
       </header>
 
       {!hasData ? (
-        <div className="glass rounded-3xl bg-gradient-to-br from-[#1a1436] to-[#111217] p-5">
+        <div className="studio-kpi studio-kpi--hero">
           <p className="text-[10px] uppercase tracking-[0.22em] text-brand/80">Sem dados ainda</p>
           <p className="mt-2 text-[13px] leading-snug text-white/90">
-            Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes ou links para começar.
+            Ainda não temos dados suficientes. Publique produtos e compartilhe seus QR Codes ou
+            links para começar.
           </p>
         </div>
       ) : (
@@ -1169,7 +1266,10 @@ function Insights({
               />
               <div className="flex flex-col gap-2">
                 {forgotten.map((p) => (
-                  <div key={p.id} className="glass flex items-center justify-between rounded-2xl p-4">
+                  <div
+                    key={p.id}
+                    className="glass flex items-center justify-between rounded-2xl p-4"
+                  >
                     <div>
                       <p className="text-[13px] font-medium">{p.name}</p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -1194,10 +1294,12 @@ function Insights({
             <div className="glass rounded-3xl p-5">
               <p className="text-[14px] leading-snug">
                 <span className="font-semibold">{totalTry.toLocaleString("pt-BR")}</span>{" "}
-                {totalTry === 1 ? "pessoa experimentou" : "pessoas experimentaram"} nos últimos dias.
+                {totalTry === 1 ? "pessoa experimentou" : "pessoas experimentaram"} nos últimos
+                dias.
               </p>
               <p className="text-[12.5px] text-muted-foreground">
-                {Math.max(0, totalTry - totalBuys).toLocaleString("pt-BR")} saíram sem clicar em comprar.
+                {Math.max(0, totalTry - totalBuys).toLocaleString("pt-BR")} saíram sem clicar em
+                comprar.
               </p>
               <button
                 onClick={onOpenInterested}
@@ -1275,12 +1377,7 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
           {product.image ? (
-            <img
-              src={product.image}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
+            <img src={product.image} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <ImageOff className="h-4 w-4 text-white/30" strokeWidth={1.5} />
@@ -1299,7 +1396,7 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
             <div key={s.label} className="flex flex-col items-center gap-1.5">
               <div className="relative h-9 w-full overflow-hidden rounded-lg bg-white/[0.03]">
                 <div
-                  className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand to-[#8f88ff]"
+                  className="absolute inset-x-0 bottom-0 bg-brand"
                   style={{ height: `${pct}%` }}
                 />
               </div>
@@ -1316,13 +1413,7 @@ function ProductFunnel({ product }: { product: StudioProduct }) {
 }
 
 /* ─────────────────────────── Store settings ─────────────────────────── */
-function StorePage({
-  store,
-  loading,
-}: {
-  store: StoreProfile | null;
-  loading: boolean;
-}) {
+function StorePage({ store, loading }: { store: StoreProfile | null; loading: boolean }) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [color, setColor] = useState("#6C63FF");
@@ -1365,15 +1456,15 @@ function StorePage({
       await qc.invalidateQueries({ queryKey: ["store"] });
       setSaved(true);
       setTimeout(() => setSaved(false), 1600);
-    } catch (e: any) {
-      setError(e?.message ?? "Não foi possível salvar.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-8 px-5 pt-7 fade-in">
+    <div className="studio-page fade-in">
       <header>
         <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
           Personalização
@@ -1410,7 +1501,7 @@ function StorePage({
         <div className="glass overflow-hidden rounded-3xl">
           <div
             className="flex items-center gap-3 px-5 py-4"
-            style={{ background: `linear-gradient(135deg, ${color}22, transparent)` }}
+            style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, var(--surface))` }}
           >
             <div
               className="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold text-white"
@@ -1448,14 +1539,38 @@ function StorePage({
 
       {/* Block: Contato */}
       <Block overline="Bloco 2" title="Contato">
-        <Field label="WhatsApp" value={wa} onChange={setWa} placeholder="(11) 99999-9999" Icon={Phone} />
-        <Field label="Instagram" value={ig} onChange={setIg} placeholder="@sualoja" Icon={Instagram} />
-        <Field label="Link do site" value={site} onChange={setSite} placeholder="https://" Icon={Globe} />
+        <Field
+          label="WhatsApp"
+          value={wa}
+          onChange={setWa}
+          placeholder="(11) 99999-9999"
+          Icon={Phone}
+        />
+        <Field
+          label="Instagram"
+          value={ig}
+          onChange={setIg}
+          placeholder="@sualoja"
+          Icon={Instagram}
+        />
+        <Field
+          label="Link do site"
+          value={site}
+          onChange={setSite}
+          placeholder="https://"
+          Icon={Globe}
+        />
       </Block>
 
       {/* Block: Endereço */}
       <Block overline="Bloco 3" title="Endereço">
-        <Field label="Endereço físico" value={addr} onChange={setAddr} placeholder="Rua, número, cidade" Icon={MapPin} />
+        <Field
+          label="Endereço físico"
+          value={addr}
+          onChange={setAddr}
+          placeholder="Rua, número, cidade"
+          Icon={MapPin}
+        />
       </Block>
 
       {/* Block: Plano */}
@@ -1466,7 +1581,7 @@ function StorePage({
             <p className="mt-2 text-[13px] font-medium">Powered by AuraFit</p>
             <p className="mt-1 text-[11px] text-muted-foreground">Marca AuraFit visível</p>
           </div>
-          <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-[#1a1436] to-[#111217] p-4">
+          <div className="editorial-card border-brand/30 p-4">
             <p className="text-[10.5px] uppercase tracking-[0.22em] text-brand/80">White Label</p>
             <ul className="mt-2 space-y-1 text-[11.5px] text-white/90">
               <li>Sua marca e logo</li>
@@ -1593,24 +1708,22 @@ function StudioBottomNav({ current, onGo }: { current: Tab; onGo: (t: Tab) => vo
   ];
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-[480px] justify-center px-3 pb-3 pt-2"
+      className="studio-nav"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="glass flex w-full items-center justify-between gap-0.5 rounded-full px-1.5 py-1.5">
+      <div className="studio-nav__rail">
         {items.map(({ tab, label, icon: Icon }) => {
           const active = current === tab;
           return (
             <button
               key={tab}
               onClick={() => onGo(tab)}
-              className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-full px-1.5 py-2 text-[9.5px] font-medium transition-colors ${
-                active ? "text-brand" : "text-muted-foreground"
-              }`}
+              className={`studio-nav__item ${active ? "studio-nav__item--active" : ""}`}
               aria-label={label}
             >
               <Icon className="h-4 w-4" strokeWidth={1.7} />
               <span className="leading-none">{label}</span>
-              {active && <span className="absolute -bottom-0.5 h-1 w-1 rounded-full bg-brand" />}
+              {active && <span className="studio-nav__indicator" />}
             </button>
           );
         })}
@@ -1683,7 +1796,8 @@ function ImportModal({
       setStep("upload");
       return;
     }
-    const hasIssues = catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
+    const hasIssues =
+      catalog.some((r) => r.status !== "pronto") || catalog.some((r) => !(r.price > 0));
     setStep(hasIssues ? "issues" : "review");
   }
 
@@ -1764,7 +1878,10 @@ function ImportModal({
           </p>
           <button
             onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => {
               e.preventDefault();
@@ -1784,8 +1901,12 @@ function ImportModal({
               <p className="mt-1 text-[11.5px] text-muted-foreground">ou selecionar arquivo</p>
             </div>
             <div className="flex gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">Excel</span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">CSV</span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
+                Excel
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-muted-foreground">
+                CSV
+              </span>
             </div>
           </button>
           <input
@@ -1823,7 +1944,7 @@ function ImportModal({
           </div>
           <div className="h-1 w-40 overflow-hidden rounded-full bg-white/[0.05]">
             <div
-              className="h-full bg-gradient-to-r from-brand to-[#8f88ff] transition-all"
+              className="h-full bg-brand transition-all"
               style={{ width: `${((progress + 1) / ANALYZE_MESSAGES.length) * 100}%` }}
             />
           </div>
@@ -1850,9 +1971,21 @@ function ImportModal({
             </p>
           </div>
           <ul className="flex flex-col gap-2">
-            <IssueRow label="produtos sem imagem" count={issues.noImage} tone={issues.noImage ? "warn" : "ok"} />
-            <IssueRow label="preços inválidos" count={issues.badPrice} tone={issues.badPrice ? "warn" : "ok"} />
-            <IssueRow label="categorias desconhecidas" count={issues.unknownCat} tone={issues.unknownCat ? "warn" : "ok"} />
+            <IssueRow
+              label="produtos sem imagem"
+              count={issues.noImage}
+              tone={issues.noImage ? "warn" : "ok"}
+            />
+            <IssueRow
+              label="preços inválidos"
+              count={issues.badPrice}
+              tone={issues.badPrice ? "warn" : "ok"}
+            />
+            <IssueRow
+              label="categorias desconhecidas"
+              count={issues.unknownCat}
+              tone={issues.unknownCat ? "warn" : "ok"}
+            />
           </ul>
           <div className="flex flex-col gap-2 pt-1">
             <button
@@ -1884,7 +2017,12 @@ function ImportModal({
                   <div className="flex items-center gap-3">
                     <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/[0.05]">
                       {r.image ? (
-                        <img src={r.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        <img
+                          src={r.image}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
                           <ImageOff className="h-3.5 w-3.5 text-white/30" strokeWidth={1.5} />
@@ -1895,7 +2033,8 @@ function ImportModal({
                       <p className="truncate text-[12.5px] font-medium">{r.name}</p>
                       <p className="text-[10.5px] text-muted-foreground">
                         {CATEGORY_LABEL[r.category]} · R$ {r.price.toFixed(2).replace(".", ",")}
-                        {r.variantCount > 0 && ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
+                        {r.variantCount > 0 &&
+                          ` · ${variantSummaryText(r.variantCount, r.sizeCount, r.source.variants[0]?.option_kind)}`}
                         {r.variantCount === 0 && r.sizeCount > 0 && ` · ${r.sizeCount} tamanhos`}
                       </p>
                     </div>
@@ -1907,7 +2046,8 @@ function ImportModal({
                         onClick={() => {
                           setExpanded((prev) => {
                             const next = new Set(prev);
-                            if (next.has(r.id)) next.delete(r.id); else next.add(r.id);
+                            if (next.has(r.id)) next.delete(r.id);
+                            else next.add(r.id);
                             return next;
                           });
                         }}
@@ -2018,7 +2158,11 @@ function OptionQuestions({
       const existing = initial[q.normalizedName];
       const idx = existing
         ? ROLE_CHOICES.findIndex((c) => c.role === existing.role && c.kind === existing.kind)
-        : ROLE_CHOICES.findIndex((c) => c.role === q.suggestedRole && (q.suggestedRole === "size" || c.kind === q.suggestedKind));
+        : ROLE_CHOICES.findIndex(
+            (c) =>
+              c.role === q.suggestedRole &&
+              (q.suggestedRole === "size" || c.kind === q.suggestedKind),
+          );
       out[q.normalizedName] = idx >= 0 ? idx : 3;
     }
     return out;
@@ -2139,8 +2283,8 @@ function ParsedVariantEditor({
     try {
       const url = await uploadProductImage(f);
       onChange({ ...variant, image: url });
-    } catch (e: any) {
-      setUploadErr(e?.message ?? "Falha no upload.");
+    } catch (e: unknown) {
+      setUploadErr(e instanceof Error ? e.message : "Falha no upload.");
     } finally {
       setUploading(false);
     }
@@ -2173,7 +2317,9 @@ function ParsedVariantEditor({
                   key={c.kind}
                   onClick={() => onChange({ ...variant, option_kind: c.kind })}
                   className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                    active ? "border-brand bg-brand/15 text-brand" : "border-white/10 text-muted-foreground"
+                    active
+                      ? "border-brand bg-brand/15 text-brand"
+                      : "border-white/10 text-muted-foreground"
                   }`}
                 >
                   {c.label}
@@ -2196,7 +2342,10 @@ function ParsedVariantEditor({
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
         />
         <input
           value={variant.image ?? ""}
@@ -2215,25 +2364,14 @@ function ParsedVariantEditor({
   );
 }
 
-
-function IssueRow({
-  label,
-  count,
-  tone,
-}: {
-  label: string;
-  count: number;
-  tone: "warn" | "ok";
-}) {
+function IssueRow({ label, count, tone }: { label: string; count: number; tone: "warn" | "ok" }) {
   const cls =
     tone === "warn"
       ? "bg-amber-500/10 text-amber-300 ring-amber-400/20"
       : "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20";
   const Icon = tone === "warn" ? AlertTriangle : Check;
   return (
-    <li
-      className={`flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ${cls}`}
-    >
+    <li className={`flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ${cls}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
       <p className="text-[12.5px]">
         <span className="font-semibold tabular-nums">{count}</span>{" "}
@@ -2270,7 +2408,10 @@ function QrModal({
   const link = product.qrToken ? tryOnUrl(product.qrToken) : "";
 
   useEffect(() => {
-    if (product.qrToken) generateQrDataUrl(product.qrToken).then(setQrSrc).catch(() => setQrSrc(null));
+    if (product.qrToken)
+      generateQrDataUrl(product.qrToken)
+        .then(setQrSrc)
+        .catch(() => setQrSrc(null));
   }, [product.qrToken]);
 
   function copyLink() {
@@ -2282,9 +2423,10 @@ function QrModal({
 
   function printLabel() {
     if (!qrSrc) return;
-    const priceHtml = product.price > 0
-      ? `<p class="price">R$ ${product.price.toFixed(2).replace(".", ",")}</p>`
-      : "";
+    const priceHtml =
+      product.price > 0
+        ? `<p class="price">R$ ${product.price.toFixed(2).replace(".", ",")}</p>`
+        : "";
     const safeStore = (storeName ?? "AuraFit").replace(/[<>&]/g, "");
     const safeName = product.name.replace(/[<>&]/g, "");
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>QR ${safeName}</title>
@@ -2321,7 +2463,9 @@ function QrModal({
           {qrSrc ? (
             <img src={qrSrc} alt={`QR ${product.name}`} width={168} height={168} />
           ) : (
-            <div className="flex h-[168px] w-[168px] items-center justify-center text-xs text-muted-foreground">…</div>
+            <div className="flex h-[168px] w-[168px] items-center justify-center text-xs text-muted-foreground">
+              …
+            </div>
           )}
         </div>
         <div className="text-center">
@@ -2329,10 +2473,25 @@ function QrModal({
           <p className="mt-1 break-all text-[11px] text-muted-foreground">{link}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <ModalBtn Icon={Download} label="Baixar QR" primary onClick={() => product.qrToken && downloadQr(product.qrToken, `qr-${product.name}`)} />
+          <ModalBtn
+            Icon={Download}
+            label="Baixar QR"
+            primary
+            onClick={() => product.qrToken && downloadQr(product.qrToken, `qr-${product.name}`)}
+          />
           <ModalBtn Icon={Copy} label={copied ? "Copiado" : "Copiar link"} onClick={copyLink} />
           <ModalBtn Icon={Printer} label="Imprimir" onClick={printLabel} />
-          <ModalBtn Icon={MessageCircle} label="WhatsApp" onClick={() => link && window.open(`https://wa.me/?text=${encodeURIComponent(`Experimente: ${link}`)}`, "_blank")} />
+          <ModalBtn
+            Icon={MessageCircle}
+            label="WhatsApp"
+            onClick={() =>
+              link &&
+              window.open(
+                `https://wa.me/?text=${encodeURIComponent(`Experimente: ${link}`)}`,
+                "_blank",
+              )
+            }
+          />
         </div>
       </div>
     </Modal>
@@ -2404,7 +2563,7 @@ function AddProductModal({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (p: Omit<StudioProduct, "id" | "stats" | "status">) => void;
+  onSave: (p: ProductInput) => Promise<void> | void;
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -2427,8 +2586,8 @@ function AddProductModal({
     try {
       const url = await uploadProductImage(f);
       setImage(url);
-    } catch (e: any) {
-      setUploadError(e?.message ?? "Falha no upload da imagem.");
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : "Falha no upload da imagem.");
     } finally {
       setUploading(false);
     }
@@ -2443,12 +2602,12 @@ function AddProductModal({
         name: name.trim(),
         price: Number(price),
         category,
-        image: image.trim(),
+        image: image.trim() || undefined,
         buyUrl: buyUrl.trim() || undefined,
         sku: sku.trim() || undefined,
-      } as any);
-    } catch (e: any) {
-      setSubmitError(e?.message ?? "Não foi possível salvar.");
+      });
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
       setSaving(false);
     }
@@ -2465,7 +2624,12 @@ function AddProductModal({
   return (
     <Modal onClose={onClose} title="Novo produto">
       <div className="flex flex-col gap-3">
-        <MField label="Nome do produto" value={name} onChange={setName} placeholder="Ex: Jaqueta Jeans" />
+        <MField
+          label="Nome do produto"
+          value={name}
+          onChange={setName}
+          placeholder="Ex: Jaqueta Jeans"
+        />
 
         {/* Foto: upload + URL */}
         <div className="glass rounded-2xl p-3.5">
@@ -2676,14 +2840,88 @@ function Modal({
   title: string;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (element) =>
+          !element.hasAttribute("hidden") &&
+          element.getAttribute("aria-hidden") !== "true" &&
+          element.getClientRects().length > 0 &&
+          getComputedStyle(element).visibility !== "hidden",
+      );
+
+    const frame = requestAnimationFrame(() => (focusables()[0] ?? dialog).focus());
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-md sm:items-center">
-      <div className="glass max-h-[90dvh] w-full max-w-[440px] overflow-y-auto rounded-t-3xl border-t border-white/10 p-5 sm:rounded-3xl sm:border">
+    <div className="modal-curtain">
+      <div
+        ref={dialogRef}
+        className="modal-sheet max-h-[90dvh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-modal-title"
+        tabIndex={-1}
+      >
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-[15px] font-semibold tracking-tight">{title}</p>
+          <p id="studio-modal-title" className="text-[15px] font-semibold tracking-tight">
+            {title}
+          </p>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+            className="flex h-9 w-9 items-center justify-center border border-border-strong bg-surface transition-colors hover:bg-terracotta hover:text-ink"
             aria-label="Fechar"
           >
             <X className="h-3.5 w-3.5" strokeWidth={1.7} />
