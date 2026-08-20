@@ -28,18 +28,8 @@ import {
   Images,
   QrCode,
   Store,
-
 } from "lucide-react";
 import { generateTryOnLook, recoverTryOnLook } from "@/lib/tryon.functions";
-import ba1Before from "@/assets/ba-1-before.jpg";
-import ba1After from "@/assets/ba-1-after.jpg";
-import ba2Before from "@/assets/ba-2-before.jpg";
-import ba2After from "@/assets/ba-2-after.jpg";
-
-const BA_PAIRS: Array<{ before: string; after: string; label: string }> = [
-  { before: ba1Before, after: ba1After, label: "Camiseta básica" },
-  { before: ba2Before, after: ba2After, label: "Jaqueta aplicada" },
-];
 
 export const Route = createFileRoute("/")({
   component: AuraFitApp,
@@ -92,11 +82,17 @@ function AuraFitApp() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setSavedLooks(JSON.parse(raw));
-    } catch {}
+    } catch {
+      // O navegador pode bloquear armazenamento local em modo privado.
+    }
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedLooks)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedLooks));
+    } catch {
+      // A experiência continua normalmente quando o armazenamento está indisponível.
+    }
   }, [savedLooks]);
 
   async function handleGenerate() {
@@ -167,7 +163,9 @@ function AuraFitApp() {
       const rid = (e as { requestId?: string })?.requestId ?? null;
       if (rid) {
         pendingRequestId.current = rid;
-        setErrorMessage("Seu resultado ainda está sendo finalizado. Toque em Gerar novamente para recuperar sem cobrar.");
+        setErrorMessage(
+          "Seu resultado ainda está sendo finalizado. Toque em Gerar novamente para recuperar sem cobrar.",
+        );
       } else {
         const msg = e instanceof Error ? e.message : "Não foi possível processar. Tente novamente.";
         setErrorMessage(msg === "__PENDING__" ? "Seu resultado ainda está sendo finalizado." : msg);
@@ -177,7 +175,6 @@ function AuraFitApp() {
       inFlight.current = false;
     }
   }
-
 
   function openTryOn(cat: UiCategory) {
     if (PRO_CATS.includes(cat)) {
@@ -200,12 +197,9 @@ function AuraFitApp() {
   return (
     <div className="relative min-h-screen w-full text-foreground">
       <div className="grain-overlay" />
-      <div className="relative z-[2] mx-auto flex min-h-screen w-full max-w-[440px] flex-col">
+      <div className="relative z-[2] mx-auto flex min-h-screen w-full flex-col">
         {currentScreen === "home" && (
-          <Home
-            onStart={() => openTryOn("superior")}
-            onCategory={openTryOn}
-          />
+          <Home onStart={() => openTryOn("superior")} onCategory={openTryOn} />
         )}
         {currentScreen === "tryon" && (
           <TryOn
@@ -260,117 +254,223 @@ function Home({
   onStart: () => void;
   onCategory: (c: UiCategory) => void;
 }) {
+  const [activeChapter, setActiveChapter] = useState(0);
+  const chapters = [
+    { number: "01", title: "Escolha a peça", note: "Foto, catálogo ou link da loja" },
+    { number: "02", title: "Entre em cena", note: "Uma foto sua, com luz natural" },
+    { number: "03", title: "Compare o caimento", note: "Antes e depois no mesmo quadro" },
+  ];
+
   return (
-    <div className="flex flex-1 flex-col gap-14 px-6 pt-14 pb-32 fade-in">
-      {/* Hero */}
-      <header className="fade-up">
-        <p className="text-[13px] font-medium text-muted-foreground">
-          Veja como fica antes de comprar.
-        </p>
-        <h1 className="mt-3 font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.035em]">
-          Escolha uma roupa.<br />
-          Use sua foto.<br />
-          <span className="text-gradient-violet">Veja como ela fica.</span>
-        </h1>
+    <div className="min-h-dvh pb-32 fade-in">
+      <header className="atelier-topbar">
         <button
-          onClick={onStart}
-          className="btn-brand mt-8 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-medium active:scale-[0.98] transition-transform"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="atelier-wordmark"
+          aria-label="AuraFit, voltar ao topo"
         >
-          Ver como fica
-          <ArrowRight className="h-4 w-4" strokeWidth={2} />
+          <span className="atelier-wordmark__mark">AF</span>
+          <span>AuraFit</span>
         </button>
+        <p className="hidden text-[10px] uppercase tracking-[0.26em] text-muted-foreground sm:block">
+          Provador digital · edição 01
+        </p>
+        <Link to="/studio" className="atelier-text-link">
+          Studio <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </header>
 
-      {/* Before/After */}
-      <section className="fade-up" style={{ animationDelay: "80ms" }}>
-        <BeforeAfterShowcase />
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Arraste para comparar.
-        </p>
-      </section>
-
-      {/* Como funciona */}
-      <section className="fade-up" style={{ animationDelay: "120ms" }}>
-        <SectionLabel>Como funciona</SectionLabel>
-        <div className="flex flex-col gap-3">
-          {[
-            { n: "01", t: "Escolha uma roupa." },
-            { n: "02", t: "Use sua foto." },
-            { n: "03", t: "Veja como ela fica." },
-          ].map((s) => (
-            <div key={s.n} className="glass flex items-center gap-5 rounded-2xl px-5 py-4">
-              <span className="font-display text-lg font-medium text-gradient-violet">{s.n}</span>
-              <span className="text-[15px] font-medium text-foreground/95">{s.t}</span>
+      <main>
+        <section className="editorial-hero">
+          <div className="editorial-hero__copy auth-reveal">
+            <p className="editorial-kicker">Vista a ideia antes da compra</p>
+            <h1 className="editorial-hero__title">
+              Seu corpo.
+              <br />
+              <em>Sua escolha.</em>
+              <br />
+              Antes do clique.
+            </h1>
+            <p className="editorial-hero__body">
+              Um provador que transforma dúvida em decisão. Escolha a peça, entre em cena e compare
+              o caimento.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <button onClick={onStart} className="atelier-button">
+                Começar prova <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() =>
+                  document.getElementById("como-funciona")?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="atelier-text-link"
+              >
+                Ver o processo <span aria-hidden="true">↓</span>
+              </button>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="editorial-hero__index" aria-label="Resumo da experiência">
+              <span>01 peça</span>
+              <span>01 foto</span>
+              <span>01 decisão melhor</span>
+            </div>
+          </div>
+          <AtelierDeck active={activeChapter} onChange={setActiveChapter} />
+        </section>
 
-      {/* Categorias */}
-      <section className="fade-up" style={{ animationDelay: "160ms" }}>
-        <SectionLabel>Categorias</SectionLabel>
-        <div className="grid grid-cols-3 gap-3">
-          <CategoryCard
-            icon={<Shirt className="h-5 w-5" strokeWidth={1.5} />}
-            label="Roupas"
-            status="ativo"
-            onClick={() => onCategory("superior")}
-          />
-          <CategoryCard
-            icon={<Footprints className="h-5 w-5" strokeWidth={1.5} />}
-            label="Calçados"
-            status="pro"
-            onClick={() => onCategory("calcados")}
-          />
-          <CategoryCard
-            icon={<Watch className="h-5 w-5" strokeWidth={1.5} />}
-            label="Acessórios"
-            status="pro"
-            onClick={() => onCategory("acessorios")}
-          />
+        <div className="atelier-tape" aria-hidden="true">
+          <span>PROVE</span>
+          <span>COMPARE</span>
+          <span>DECIDA</span>
+          <span>SEM ADIVINHAR</span>
         </div>
-      </section>
 
-      <footer className="pt-4 text-center">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          {STORE.storeName ? STORE.storeName : "Powered by AuraFit"}
-        </p>
+        <section id="como-funciona" className="atelier-section">
+          <div className="atelier-section__heading">
+            <SectionLabel>O processo</SectionLabel>
+            <h2 className="font-display text-[clamp(2.8rem,7vw,6rem)] leading-[0.9] tracking-[-0.045em]">
+              Três gestos.
+              <br />
+              Um look possível.
+            </h2>
+            <p className="max-w-sm text-sm leading-7 text-muted-foreground">
+              Toque em cada etapa para acompanhar como a peça atravessa o provador.
+            </p>
+          </div>
+          <ol className="process-ledger">
+            {chapters.map((chapter, index) => (
+              <li key={chapter.number}>
+                <button
+                  className="process-ledger__item"
+                  data-active={activeChapter === index}
+                  onClick={() => setActiveChapter(index)}
+                  aria-pressed={activeChapter === index}
+                >
+                  <span className="process-ledger__number">{chapter.number}</span>
+                  <span>
+                    <strong>{chapter.title}</strong>
+                    <small>{chapter.note}</small>
+                  </span>
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="atelier-section atelier-section--categories">
+          <div className="atelier-section__heading">
+            <SectionLabel>Acervo disponível</SectionLabel>
+            <h2 className="font-display text-5xl leading-none tracking-[-0.04em] sm:text-6xl">
+              Escolha por onde começar.
+            </h2>
+          </div>
+          <div className="category-rail">
+            <CategoryCard
+              icon={<Shirt className="h-6 w-6" strokeWidth={1.35} />}
+              label="Parte de cima"
+              status="ativo"
+              onClick={() => onCategory("superior")}
+            />
+            <CategoryCard
+              icon={<Shirt className="h-6 w-6 rotate-180" strokeWidth={1.35} />}
+              label="Parte de baixo"
+              status="ativo"
+              onClick={() => onCategory("inferior")}
+            />
+            <CategoryCard
+              icon={<Footprints className="h-6 w-6" strokeWidth={1.35} />}
+              label="Calçados"
+              status="pro"
+              onClick={() => onCategory("calcados")}
+            />
+            <CategoryCard
+              icon={<Watch className="h-6 w-6" strokeWidth={1.35} />}
+              label="Acessórios"
+              status="pro"
+              onClick={() => onCategory("acessorios")}
+            />
+          </div>
+        </section>
+      </main>
+
+      <footer className="atelier-footer">
+        <span>{STORE.storeName || "AuraFit"}</span>
+        <span>Feito para escolher melhor.</span>
+        <span>2026</span>
       </footer>
     </div>
   );
 }
 
-/* ─────────── Before/After showcase (rotates real examples) ─────────── */
-function BeforeAfterShowcase() {
-  const [idx, setIdx] = useState(0);
-  const pair = BA_PAIRS[idx];
+function AtelierDeck({ active, onChange }: { active: number; onChange: (index: number) => void }) {
+  const cards = [
+    { id: "garment", label: "Peça escolhida", meta: "imagem · textura · corte" },
+    { id: "portrait", label: "Sua presença", meta: "pose · proporção · luz" },
+    { id: "result", label: "Prova final", meta: "compare · salve · compre" },
+  ];
   return (
-    <div>
-      <BeforeAfter before={pair.before} after={pair.after} autoAnimate />
-      {BA_PAIRS.length > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          {BA_PAIRS.map((p, i) => (
-            <button
-              key={p.label}
-              onClick={() => setIdx(i)}
-              aria-label={p.label}
-              className={`h-1.5 rounded-full transition-all ${
-                i === idx ? "w-6 bg-white/90" : "w-1.5 bg-white/25 hover:bg-white/50"
-              }`}
-            />
-          ))}
+    <div
+      className="atelier-deck auth-reveal"
+      data-active={active}
+      style={{ animationDelay: "90ms" }}
+    >
+      <div className="atelier-deck__canvas" aria-live="polite">
+        <div className="atelier-deck__measure" aria-hidden="true">
+          <span>42</span>
+          <span>68</span>
+          <span>96</span>
         </div>
-      )}
+        <svg
+          className="atelier-deck__figure"
+          viewBox="0 0 420 560"
+          role="img"
+          aria-label={cards[active].label}
+        >
+          <path
+            className="figure-line"
+            d="M208 86c39 0 55 30 55 63 0 28-18 56-55 56s-55-28-55-56c0-33 16-63 55-63Z"
+          />
+          <path
+            className="figure-line"
+            d="M143 222c-42 32-54 87-50 143m180-143c42 32 54 87 50 143M143 222c18-14 41-22 65-22s47 8 65 22l-10 210H153l-10-210Z"
+          />
+          <path
+            className="figure-garment"
+            data-visible={active > 0}
+            d="M142 226 98 278l39 38 21-23-5 136h110l-5-136 21 23 39-38-44-52-43 24h-46l-43-24Z"
+          />
+          <path
+            className="figure-stitch"
+            data-visible={active === 2}
+            d="M184 250v179m47-179v179M137 316h142"
+          />
+        </svg>
+        <div className="atelier-deck__ticket">
+          <span>{cards[active].label}</span>
+          <small>{cards[active].meta}</small>
+        </div>
+        <div className="fabric-swatch fabric-swatch--one" aria-hidden="true" />
+        <div className="fabric-swatch fabric-swatch--two" aria-hidden="true" />
+      </div>
+      <div className="atelier-deck__controls" aria-label="Etapas da experiência">
+        {cards.map((card, index) => (
+          <button
+            key={card.id}
+            onClick={() => onChange(index)}
+            aria-label={`Mostrar ${card.label}`}
+            aria-pressed={active === index}
+          >
+            <span>0{index + 1}</span>
+            <span>{card.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.28em] text-muted-foreground">
-      {children}
-    </p>
-  );
+  return <p className="editorial-kicker">{children}</p>;
 }
 
 function CategoryCard({
@@ -386,29 +486,27 @@ function CategoryCard({
 }) {
   const isPro = status === "pro";
   return (
-    <button
-      onClick={onClick}
-      className={`glass relative flex flex-col items-start gap-5 rounded-2xl p-4 text-left transition-all active:scale-[0.97] hover:border-white/[0.10] ${!isPro ? "border-[color:var(--brand)]/40" : ""}`}
-    >
-      <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04] ${isPro ? "text-white/50" : "text-white/90"}`}>
-        {icon}
-      </div>
-      <span className={`text-[13px] font-medium ${isPro ? "text-white/60" : ""}`}>{label}</span>
-      <span
-        className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] ${
-          isPro
-            ? "border border-[color:var(--brand)]/40 text-[color:var(--brand-2)]"
-            : "text-muted-foreground"
-        }`}
-      >
-        {isPro ? "Pro" : "Ativo"}
+    <button onClick={onClick} className="category-ledger">
+      <span className="category-ledger__index">{isPro ? "EM BREVE" : "DISPONÍVEL"}</span>
+      <span className="category-ledger__icon">{icon}</span>
+      <span className="category-ledger__label">{label}</span>
+      <span className="category-ledger__arrow" aria-hidden="true">
+        ↗
       </span>
     </button>
   );
 }
 
 /* ─────────── Before / After slider ─────────── */
-function BeforeAfter({ before, after, autoAnimate }: { before: string; after: string; autoAnimate?: boolean }) {
+function BeforeAfter({
+  before,
+  after,
+  autoAnimate,
+}: {
+  before: string;
+  after: string;
+  autoAnimate?: boolean;
+}) {
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -441,11 +539,42 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
     setPos(Math.max(0, Math.min(100, p)));
   }
 
+  function updateFromKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
+    const moves: Record<string, number> = {
+      ArrowLeft: -5,
+      ArrowDown: -5,
+      ArrowRight: 5,
+      ArrowUp: 5,
+    };
+
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      userInteracted.current = true;
+      setPos(event.key === "Home" ? 0 : 100);
+      return;
+    }
+
+    const move = moves[event.key];
+    if (move === undefined) return;
+
+    event.preventDefault();
+    userInteracted.current = true;
+    setPos((current) => Math.max(0, Math.min(100, current + move)));
+  }
 
   return (
     <div
       ref={ref}
-      className="glass relative aspect-[3/4] w-full overflow-hidden rounded-[28px] select-none touch-none bg-black/60"
+      className="glass relative aspect-[3/4] w-full overflow-hidden select-none touch-none bg-ink"
+      role="slider"
+      tabIndex={0}
+      aria-label="Comparar imagem antes e depois"
+      aria-orientation="horizontal"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pos)}
+      aria-valuetext={`${Math.round(pos)}% da imagem original visível`}
+      onKeyDown={updateFromKeyboard}
       onPointerDown={(e) => {
         dragging.current = true;
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -473,19 +602,16 @@ function BeforeAfter({ before, after, autoAnimate }: { before: string; after: st
         draggable={false}
       />
 
-      <span className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+      <span className="absolute left-3 top-3 border border-paper/30 bg-ink px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-paper">
         Antes
       </span>
-      <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+      <span className="absolute right-3 top-3 border border-paper/30 bg-ink px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-paper">
         Depois
       </span>
 
+      <div className="absolute inset-y-0 w-px bg-paper" style={{ left: `calc(${pos}% - 1px)` }} />
       <div
-        className="absolute inset-y-0 w-[2px] bg-white/90 shadow-[0_0_20px_rgba(141,103,255,0.6)]"
-        style={{ left: `calc(${pos}% - 1px)` }}
-      />
-      <div
-        className="btn-brand absolute top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20"
+        className="absolute top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center border border-ink bg-tape text-ink"
         style={{ left: `${pos}%` }}
       >
         <ChevronRight className="h-4 w-4 -translate-x-[7px]" strokeWidth={2} />
@@ -521,28 +647,54 @@ function TryOn(props: {
     pro?: boolean;
     icon: React.ElementType;
   }> = [
-    { id: "superior", label: "Superior", hint: "Camisas, camisetas, jaquetas e moletons.", icon: Shirt },
+    {
+      id: "superior",
+      label: "Superior",
+      hint: "Camisas, camisetas, jaquetas e moletons.",
+      icon: Shirt,
+    },
     { id: "inferior", label: "Inferior", hint: "Calças, shorts e saias.", icon: Shirt },
-    { id: "calcados", label: "Calçados", hint: "Tênis, botas e sapatos.", pro: true, icon: Footprints },
-    { id: "acessorios", label: "Acessórios", hint: "Óculos, bolsas e relógios.", pro: true, icon: Watch },
+    {
+      id: "calcados",
+      label: "Calçados",
+      hint: "Tênis, botas e sapatos.",
+      pro: true,
+      icon: Footprints,
+    },
+    {
+      id: "acessorios",
+      label: "Acessórios",
+      hint: "Óculos, bolsas e relógios.",
+      pro: true,
+      icon: Watch,
+    },
   ];
 
   return (
-    <div className="flex flex-1 flex-col gap-8 px-6 pt-14 pb-32 fade-in">
-      <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-          Experimentar
-        </p>
-        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">
-          Veja como fica<br />em você.
+    <div className="tryon-workspace fade-in">
+      <header className="tryon-workspace__header">
+        <p className="editorial-kicker">Prova · 01</p>
+        <h1 className="mt-4 font-display text-[clamp(3.2rem,9vw,6.5rem)] font-medium leading-[0.84] tracking-[-0.05em]">
+          Monte a<br />
+          <em>prova.</em>
         </h1>
+        <p className="mt-5 max-w-sm text-sm leading-7 text-muted-foreground">
+          Cada escolha aparece no quadro antes da geração. Revise a peça, sua foto e a categoria.
+        </p>
       </header>
 
       {/* Step 1 — Escolha uma roupa */}
-      <StepBlock number="1" title="Escolha uma roupa" hint="Envie a foto da peça ou escolha do catálogo da loja.">
+      <StepBlock
+        number="1"
+        title="Escolha uma roupa"
+        hint="Envie a foto da peça ou escolha do catálogo da loja."
+      >
         <ImageUpload
           value={props.garmentImage}
-          onChange={(v) => { props.setGarmentImage(v); if (v) props.setGarmentImageUrl(""); }}
+          onChange={(v) => {
+            props.setGarmentImage(v);
+            if (v) props.setGarmentImageUrl("");
+          }}
           primaryLabel="Enviar foto da roupa"
           secondaryLabel="Escolher do catálogo"
           secondaryDisabled={!STORE.storeCatalog?.length}
@@ -550,7 +702,9 @@ function TryOn(props: {
         {props.garmentImageUrl && !props.garmentImage && (
           <div className="glass mt-3 flex items-center gap-3 rounded-2xl px-4 py-3">
             <Link2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-            <span className="flex-1 truncate text-xs text-foreground/80">{props.garmentImageUrl}</span>
+            <span className="flex-1 truncate text-xs text-foreground/80">
+              {props.garmentImageUrl}
+            </span>
             <button
               onClick={() => props.setGarmentImageUrl("")}
               className="text-muted-foreground hover:text-foreground"
@@ -579,7 +733,11 @@ function TryOn(props: {
       </StepBlock>
 
       {/* Step 2 — Use sua foto */}
-      <StepBlock number="2" title="Use sua foto" hint="Use uma foto de corpo inteiro, com boa iluminação.">
+      <StepBlock
+        number="2"
+        title="Use sua foto"
+        hint="Use uma foto de corpo inteiro, com boa iluminação."
+      >
         <ImageUpload
           value={props.modelImage}
           onChange={props.setModelImage}
@@ -590,8 +748,12 @@ function TryOn(props: {
       </StepBlock>
 
       {/* Step 3 — Categoria */}
-      <StepBlock number="3" title="Escolha a categoria" hint="Escolha o tipo para um resultado mais fiel.">
-        <div className="grid grid-cols-2 gap-2.5">
+      <StepBlock
+        number="3"
+        title="Escolha a categoria"
+        hint="Escolha o tipo para um resultado mais fiel."
+      >
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {categories.map((c) => {
             const active = props.uiCategory === c.id;
             return (
@@ -601,18 +763,18 @@ function TryOn(props: {
                   if (c.pro) return props.onPro();
                   props.setUiCategory(c.id);
                 }}
-                className={`relative flex flex-col items-start gap-2 rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98] ${
-                  active && !c.pro
-                    ? "border-[color:var(--brand)] bg-white/[0.03]"
-                    : "border-[color:var(--border)] bg-[color:var(--surface)]"
+                className={`category-choice ${
+                  active && !c.pro ? "category-choice--active" : ""
                 } ${c.pro ? "opacity-70" : ""}`}
               >
-                <span className={`text-sm font-medium ${c.pro ? "text-white/70" : "text-white"}`}>
+                <span
+                  className={`text-sm font-medium ${c.pro ? "text-foreground/70" : "text-foreground"}`}
+                >
                   {c.label}
                 </span>
                 <span className="text-[10px] leading-snug text-muted-foreground">{c.hint}</span>
                 {c.pro && (
-                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand)]/40 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-[color:var(--brand-2)]">
+                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 border border-brand/40 px-1.5 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.18em] text-brand">
                     <Lock className="h-2.5 w-2.5" strokeWidth={2} /> Pro
                   </span>
                 )}
@@ -628,16 +790,12 @@ function TryOn(props: {
         </div>
       )}
 
-      <button
-        onClick={props.onSubmit}
-        className="btn-brand mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 text-sm font-medium active:scale-[0.98] transition-transform"
-      >
+      <button onClick={props.onSubmit} className="atelier-button mt-2 w-full justify-center py-4">
         Ver como fica
         <ArrowRight className="h-4 w-4" strokeWidth={2} />
       </button>
 
       {qrModal && <QrModal onClose={() => setQrModal(false)} />}
-
 
       {linkModal && (
         <LinkModal
@@ -668,16 +826,16 @@ function StepBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="mb-4 flex items-baseline gap-3">
-        <span className="font-display text-sm font-medium text-gradient-violet">{number}</span>
+    <section className="step-ledger">
+      <div className="step-ledger__heading">
+        <span className="step-ledger__number">{number}</span>
         <div>
-          <p className="text-sm font-medium">{title}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+          <p className="text-base font-medium">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{hint}</p>
         </div>
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -719,12 +877,12 @@ function ImageUpload({
 
   if (value) {
     return (
-      <div className="glass relative aspect-[4/5] w-full overflow-hidden rounded-3xl">
+      <div className="glass relative aspect-[4/5] w-full overflow-hidden">
         <img src={value} alt="Foto enviada" className="h-full w-full object-cover" />
         <button
           type="button"
           onClick={() => onChange(null)}
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/60 backdrop-blur-md"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center border border-paper/30 bg-ink text-paper"
           aria-label="Remover"
         >
           <X className="h-4 w-4" strokeWidth={1.5} />
@@ -738,9 +896,9 @@ function ImageUpload({
       <button
         type="button"
         onClick={() => (captureCamera ? cameraRef.current?.click() : galleryRef.current?.click())}
-        className="glass flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-6 transition-all active:scale-[0.98] hover:border-white/[0.10]"
+        className="upload-tile"
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04]">
+        <div className="upload-tile__icon">
           {captureCamera ? (
             <Camera className="h-4 w-4 text-white/90" strokeWidth={1.5} />
           ) : (
@@ -753,12 +911,14 @@ function ImageUpload({
         type="button"
         disabled={secondaryDisabled}
         onClick={() => galleryRef.current?.click()}
-        className={`glass flex flex-col items-center justify-center gap-2 rounded-2xl px-4 py-6 transition-all active:scale-[0.98] hover:border-white/[0.10] ${secondaryDisabled ? "opacity-40 pointer-events-none" : ""}`}
+        className={`upload-tile ${secondaryDisabled ? "opacity-40 pointer-events-none" : ""}`}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04]">
+        <div className="upload-tile__icon">
           <ImagePlus className="h-4 w-4 text-white/90" strokeWidth={1.5} />
         </div>
-        <span className="text-center text-[12.5px] font-medium leading-tight">{secondaryLabel}</span>
+        <span className="text-center text-[12.5px] font-medium leading-tight">
+          {secondaryLabel}
+        </span>
       </button>
 
       {captureCamera && (
@@ -768,7 +928,10 @@ function ImageUpload({
           accept="image/*"
           capture="environment"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+          }}
         />
       )}
       <input
@@ -776,7 +939,10 @@ function ImageUpload({
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+        }}
       />
       {fileError && (
         <p className="col-span-2 text-center text-[11.5px] text-red-400/90">{fileError}</p>
@@ -800,12 +966,14 @@ function LinkModal({
   const [img, setImg] = useState(initialImage);
   const [buy, setBuy] = useState(initialBuy);
   return (
-    <ModalShell onClose={onClose}>
+    <ModalShell label="Adicionar peça por link" onClose={onClose}>
       <h3 className="font-display text-lg font-semibold tracking-tight">Adicionar por link</h3>
-      <p className="mt-1 text-xs text-muted-foreground">Cole a URL da imagem da peça e, se quiser, o link de compra.</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Cole a URL da imagem da peça e, se quiser, o link de compra.
+      </p>
 
       <div className="mt-5 space-y-3">
-        <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+        <div className="archive-field">
           <Link2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           <input
             type="url"
@@ -816,7 +984,7 @@ function LinkModal({
             className="w-full bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
           />
         </div>
-        <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+        <div className="archive-field">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           <input
             type="url"
@@ -832,13 +1000,13 @@ function LinkModal({
       <div className="mt-6 grid grid-cols-2 gap-2.5">
         <button
           onClick={onClose}
-          className="glass rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+          className="atelier-button atelier-button--quiet justify-center px-4 py-3 text-sm"
         >
           Cancelar
         </button>
         <button
           onClick={() => onSave(img.trim(), buy.trim())}
-          className="btn-brand rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+          className="atelier-button justify-center px-4 py-3 text-sm"
         >
           Salvar link
         </button>
@@ -850,17 +1018,20 @@ function LinkModal({
 /* ─────────── QR modal (layout only) ─────────── */
 function QrModal({ onClose }: { onClose: () => void }) {
   return (
-    <ModalShell onClose={onClose}>
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
-        <QrCode className="h-5 w-5 text-white/85" strokeWidth={1.5} />
+    <ModalShell label="Escanear QR da loja" onClose={onClose}>
+      <div className="archive-stamp">
+        <QrCode className="h-5 w-5" strokeWidth={1.5} />
       </div>
-      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">Escanear QR da loja</h3>
+      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">
+        Escanear QR da loja
+      </h3>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        Aponte a câmera para o QR de uma peça na loja. Ela abre aqui automaticamente — depois é só enviar sua foto.
+        Aponte a câmera para o QR de uma peça na loja. Ela abre aqui automaticamente — depois é só
+        enviar sua foto.
       </p>
-      <div className="glass mt-5 flex aspect-square w-full items-center justify-center rounded-3xl">
-        <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02]">
-          <QrCode className="h-10 w-10 text-white/40" strokeWidth={1.25} />
+      <div className="paper-panel mt-5 flex aspect-square w-full items-center justify-center">
+        <div className="flex h-24 w-24 items-center justify-center border border-ink/30 bg-paper-deep/50">
+          <QrCode className="h-10 w-10 text-ink/55" strokeWidth={1.25} />
         </div>
       </div>
       <p className="mt-4 text-center text-[11px] text-muted-foreground">
@@ -868,7 +1039,7 @@ function QrModal({ onClose }: { onClose: () => void }) {
       </p>
       <button
         onClick={onClose}
-        className="btn-brand mt-5 w-full rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+        className="atelier-button mt-5 w-full justify-center px-4 py-3 text-sm"
       >
         Entendi
       </button>
@@ -876,21 +1047,22 @@ function QrModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-
 /* ─────────── Pro modal ─────────── */
 function ProModal({ onClose }: { onClose: () => void }) {
   return (
-    <ModalShell onClose={onClose}>
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
+    <ModalShell label="Recursos AuraFit Pro" onClose={onClose}>
+      <div className="archive-stamp">
         <Lock className="h-4 w-4 text-[color:var(--brand-2)]" strokeWidth={2} />
       </div>
-      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">Disponível no AuraFit Pro.</h3>
+      <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">
+        Disponível no AuraFit Pro.
+      </h3>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
         O plano Pro permitirá experimentar calçados, acessórios e outras peças avançadas.
       </p>
       <button
         onClick={onClose}
-        className="btn-brand mt-6 w-full rounded-full px-4 py-3 text-sm font-medium active:scale-[0.98]"
+        className="atelier-button mt-6 w-full justify-center px-4 py-3 text-sm"
       >
         Entendi
       </button>
@@ -898,16 +1070,100 @@ function ProModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ModalShell({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function useDialogFocus(onClose: () => void) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (element) =>
+          !element.hasAttribute("hidden") &&
+          element.getAttribute("aria-hidden") !== "true" &&
+          element.getClientRects().length > 0 &&
+          getComputedStyle(element).visibility !== "hidden",
+      );
+
+    const frame = requestAnimationFrame(() => (focusables()[0] ?? dialog).focus());
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return dialogRef;
+}
+
+function ModalShell({
+  children,
+  label,
+  onClose,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClose: () => void;
+}) {
+  const dialogRef = useDialogFocus(onClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-6 pt-16 backdrop-blur-md sm:items-center fade-in" onClick={onClose}>
+    <div className="modal-curtain fade-in" onClick={onClose}>
       <div
-        className="glass relative w-full max-w-[400px] rounded-[28px] p-6"
+        ref={dialogRef}
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center border border-border-strong bg-surface text-muted-foreground transition-colors hover:bg-terracotta hover:text-ink"
           aria-label="Fechar"
         >
           <X className="h-4 w-4" strokeWidth={1.5} />
@@ -921,14 +1177,20 @@ function ModalShell({ children, onClose }: { children: React.ReactNode; onClose:
 /* ─────────── Loading ─────────── */
 function LoadingScreen() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-10 px-6 py-16 fade-in">
-      <div className="glass shimmer flex h-72 w-56 items-center justify-center overflow-hidden rounded-3xl">
-        <div className="shimmer-overlay" />
-        <Sparkles className="h-6 w-6 text-white/70 pulse-soft" strokeWidth={1.5} />
+    <div className="loading-loom fade-in" role="status" aria-live="polite">
+      <div className="loading-loom__frame" aria-hidden="true">
+        <span className="loading-loom__thread loading-loom__thread--one" />
+        <span className="loading-loom__thread loading-loom__thread--two" />
+        <span className="loading-loom__thread loading-loom__thread--three" />
+        <Sparkles className="loading-loom__spark" strokeWidth={1.35} />
+        <span className="loading-loom__label">PROCESSANDO · CAIMENTO · LUZ</span>
       </div>
       <div className="text-center">
-        <h2 className="font-display text-[22px] font-semibold tracking-tight">Experimentando</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Alguns segundos.</p>
+        <p className="editorial-kicker mx-auto">Prova em andamento</p>
+        <h2 className="mt-4 font-display text-4xl font-medium tracking-tight">Ajustando o look.</h2>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Compondo peça, proporção e luz. Alguns segundos.
+        </p>
       </div>
     </div>
   );
@@ -958,77 +1220,87 @@ function Result({
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }
-    } catch {}
+    } catch {
+      // O cancelamento do compartilhamento não precisa interromper a experiência.
+    }
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-5 px-6 pt-14 pb-32 fade-in">
-      <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Resultado</p>
-        <h1 className="mt-2 font-display text-[26px] font-semibold tracking-tight">Veja em você.</h1>
+    <div className="experience-screen experience-screen--result fade-in">
+      <header className="experience-heading">
+        <p className="editorial-kicker">Resultado · prova concluída</p>
+        <h1>
+          Veja em <em>você.</em>
+        </h1>
+        <p>Arraste a régua sobre a imagem e compare o caimento antes de decidir.</p>
       </header>
 
-      {original ? (
-        <BeforeAfter before={original} after={image} />
-      ) : (
-        <div className="glass overflow-hidden rounded-[28px]">
-          <img src={image} alt="Experimentação" className="h-auto w-full" />
-        </div>
-      )}
-
-      <p className="text-center text-[11px] text-muted-foreground">
-        Resultado salvo no seu histórico.
-      </p>
-
-      {/* Buy - primary */}
-      {buyUrl ? (
-        <a
-          href={buyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-brand inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-4 text-sm font-medium active:scale-[0.98]"
-        >
-          <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Comprar peça
-        </a>
-      ) : (
-        <button
-          disabled
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4 text-sm font-medium text-white/40"
-        >
-          <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Link de compra não disponível
-        </button>
-      )}
-
-      {/* Secondaries */}
-      <div className="grid grid-cols-2 gap-2.5">
-        <button
-          onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 1600); }}
-          className="glass inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98]"
-        >
-          {saved ? (
-            <><Check className="h-4 w-4 text-[color:var(--success)]" strokeWidth={2} /> Salvo</>
-          ) : (
-            <><Bookmark className="h-4 w-4" strokeWidth={1.5} /> Salvar</>
-          )}
-        </button>
-        <button
-          onClick={handleShare}
-          className="glass inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-medium active:scale-[0.98]"
-        >
-          {copied ? (
-            <><Check className="h-4 w-4 text-[color:var(--success)]" strokeWidth={2} /> Copiado</>
-          ) : (
-            <><Share2 className="h-4 w-4" strokeWidth={1.5} /> Compartilhar</>
-          )}
-        </button>
+      <div className="result-media">
+        {original ? (
+          <BeforeAfter before={original} after={image} />
+        ) : (
+          <div className="editorial-card overflow-hidden">
+            <img src={image} alt="Experimentação" className="h-auto w-full" />
+          </div>
+        )}
       </div>
 
-      <button
-        onClick={onRetry}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--border-strong)] bg-transparent px-4 py-3.5 text-sm font-medium text-foreground/90 active:scale-[0.98] hover:bg-white/[0.03]"
-      >
-        Experimentar outra roupa
-      </button>
+      <div className="result-actions">
+        <p className="archive-index">Resultado salvo no seu histórico.</p>
+        {buyUrl ? (
+          <a
+            href={buyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="atelier-button w-full justify-center px-4 py-4 text-sm"
+          >
+            <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Comprar peça
+          </a>
+        ) : (
+          <button
+            disabled
+            className="atelier-button atelier-button--quiet w-full justify-center px-4 py-4 text-sm opacity-45"
+          >
+            <ShoppingBag className="h-4 w-4" strokeWidth={1.5} /> Link de compra não disponível
+          </button>
+        )}
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            onClick={() => {
+              setSaved(true);
+              setTimeout(() => setSaved(false), 1600);
+            }}
+            className="atelier-button atelier-button--quiet justify-center px-3 py-3.5 text-sm"
+          >
+            {saved ? (
+              <>
+                <Check className="h-4 w-4 text-success" strokeWidth={2} /> Salvo
+              </>
+            ) : (
+              <>
+                <Bookmark className="h-4 w-4" strokeWidth={1.5} /> Salvar
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleShare}
+            className="atelier-button atelier-button--quiet justify-center px-3 py-3.5 text-sm"
+          >
+            {copied ? (
+              <>
+                <Check className="h-4 w-4 text-success" strokeWidth={2} /> Copiado
+              </>
+            ) : (
+              <>
+                <Share2 className="h-4 w-4" strokeWidth={1.5} /> Compartilhar
+              </>
+            )}
+          </button>
+        </div>
+        <button onClick={onRetry} className="atelier-text-link justify-center py-3">
+          Experimentar outra roupa <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1060,33 +1332,30 @@ function Wardrobe({
   ];
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-6 pt-14 pb-32 fade-in">
-      <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Salvos</p>
-        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Looks salvos</h1>
+    <div className="experience-screen fade-in">
+      <header className="experience-heading">
+        <p className="editorial-kicker">Arquivo pessoal</p>
+        <h1>
+          Looks <em>salvos.</em>
+        </h1>
+        <p>Revise suas provas como uma mesa de contato: compare, filtre e retome suas escolhas.</p>
       </header>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="filter-ledger">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => (t.id === "pro" ? onPro() : setTab(t.id))}
-            className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-all ${
-              tab === t.id
-                ? "border-[color:var(--brand)] bg-white/[0.03] text-white"
-                : "border-[color:var(--border)] bg-[color:var(--surface)] text-foreground/60 hover:text-foreground"
-            }`}
+            className={`filter-ledger__item ${tab === t.id ? "filter-ledger__item--active" : ""}`}
           >
             {t.label}
-            {t.id === "pro" && (
-              <Lock className="ml-1 -mt-0.5 inline h-2.5 w-2.5" strokeWidth={2} />
-            )}
+            {t.id === "pro" && <Lock className="ml-1 -mt-0.5 inline h-2.5 w-2.5" strokeWidth={2} />}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="glass mt-4 flex flex-col items-center gap-3 rounded-3xl px-6 py-16 text-center">
+        <div className="editorial-empty">
           <ImageIcon className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
           <p className="text-sm font-medium">Você ainda não salvou nenhum look.</p>
           <p className="max-w-[240px] text-xs leading-relaxed text-muted-foreground">
@@ -1094,26 +1363,35 @@ function Wardrobe({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="look-contact-sheet">
           {filtered.map((l) => (
-            <div key={l.id} className="glass group relative overflow-hidden rounded-[20px] transition-all hover:border-white/[0.10]">
+            <article key={l.id} className="look-contact-sheet__item group">
               <div className="aspect-[3/4] w-full">
-                <img src={l.url} alt="Look salvo" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+                <img
+                  src={l.url}
+                  alt="Look salvo"
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                />
               </div>
               <div className="flex items-center justify-between px-3 py-3">
-                <span className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground">{l.category}</span>
+                <span className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+                  {l.category}
+                </span>
                 <span className="text-[10px] text-muted-foreground">
-                  {new Date(l.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                  {new Date(l.createdAt).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                  })}
                 </span>
               </div>
               <button
                 onClick={() => onDelete(l.id)}
-                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-black/60 opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center border border-paper/30 bg-ink text-paper opacity-100 transition-colors hover:bg-terracotta hover:text-ink sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                 aria-label="Remover"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
-            </div>
+            </article>
           ))}
         </div>
       )}
@@ -1132,15 +1410,18 @@ function Profile({ lookCount }: { lookCount: number }) {
   ];
 
   return (
-    <div className="flex flex-1 flex-col gap-7 px-6 pt-14 pb-32 fade-in">
-      <header>
-        <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Conta</p>
-        <h1 className="mt-3 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em]">Perfil</h1>
+    <div className="experience-screen experience-screen--profile fade-in">
+      <header className="experience-heading">
+        <p className="editorial-kicker">Conta · arquivo</p>
+        <h1>
+          Seu <em>perfil.</em>
+        </h1>
+        <p>Preferências, histórico e acesso ao espaço de lojistas em uma só ficha.</p>
       </header>
 
-      <div className="glass flex items-center gap-4 rounded-3xl p-5">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04]">
-          <User className="h-5 w-5 text-white/85" strokeWidth={1.5} />
+      <div className="profile-ticket">
+        <div className="profile-ticket__avatar">
+          <User className="h-5 w-5" strokeWidth={1.5} />
         </div>
         <div>
           <p className="text-sm font-medium">Você</p>
@@ -1148,12 +1429,9 @@ function Profile({ lookCount }: { lookCount: number }) {
         </div>
       </div>
 
-      <Link
-        to="/studio"
-        className="glass group flex items-center justify-between rounded-3xl p-5 transition-all hover:border-white/[0.10]"
-      >
+      <Link to="/studio" className="profile-ledger group">
         <div className="flex items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
+          <div className="profile-ledger__icon">
             <Store className="h-4 w-4 text-brand" strokeWidth={1.7} />
           </div>
           <div>
@@ -1161,18 +1439,20 @@ function Profile({ lookCount }: { lookCount: number }) {
             <p className="mt-0.5 text-xs text-muted-foreground">Painel para lojistas</p>
           </div>
         </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
+        <ChevronRight
+          className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+          strokeWidth={1.5}
+        />
       </Link>
 
-      <div className="glass divide-y divide-[color:var(--border)] rounded-3xl overflow-hidden">
-
+      <div className="profile-menu">
         {items.map(({ label, icon: Icon }) => (
           <button
             key={label}
-            className="flex w-full items-center justify-between px-5 py-4 text-sm text-foreground/90 hover:bg-white/[0.02] transition-colors"
+            className="flex w-full items-center justify-between px-5 py-4 text-sm text-foreground/90 transition-colors hover:bg-paper hover:text-ink"
           >
             <span className="inline-flex items-center gap-3">
-              <Icon className="h-4 w-4 text-white/70" strokeWidth={1.5} />
+              <Icon className="h-4 w-4" strokeWidth={1.5} />
               {label}
             </span>
             <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
@@ -1197,10 +1477,10 @@ function BottomNav({ current, onGo }: { current: Screen; onGo: (s: Screen) => vo
   ];
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-[440px] justify-center px-5 pb-4 pt-2"
+      className="atelier-nav"
       style={{ paddingBottom: "max(0.9rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="glass flex w-full items-center justify-around rounded-full px-1.5 py-1.5">
+      <div className="atelier-nav__rail">
         {items.map((it) => {
           const active =
             current === it.screen ||
@@ -1210,15 +1490,11 @@ function BottomNav({ current, onGo }: { current: Screen; onGo: (s: Screen) => vo
             <button
               key={it.screen}
               onClick={() => onGo(it.screen)}
-              className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-full px-2 py-1.5 text-[10px] font-medium transition-all ${
-                active ? "text-white" : "text-muted-foreground hover:text-foreground/80"
-              }`}
+              className={`atelier-nav__item ${active ? "atelier-nav__item--active" : ""}`}
             >
               <Icon className="h-[17px] w-[17px]" strokeWidth={active ? 2 : 1.5} />
               <span className="tracking-wide">{it.label}</span>
-              {active && (
-                <span className="absolute -bottom-0.5 h-1 w-1 rounded-full bg-brand" />
-              )}
+              {active && <span className="atelier-nav__indicator" />}
             </button>
           );
         })}
