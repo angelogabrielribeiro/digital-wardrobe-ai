@@ -1,31 +1,35 @@
 # AuraFit AI
 
-Provador virtual mobile-first que usa inteligência artificial para aplicar peças de roupa em fotos e organizar looks em um guarda-roupa digital.
+Provador virtual mobile-first que combina **inteligência artificial, moda e experiência de produto** para permitir que usuários visualizem peças em fotos, organizem resultados e construam um guarda-roupa digital.
 
-🔗 **Demo:** https://digital-wardrobe-ai.lovable.app
+**Demo:** https://digital-wardrobe-ai.lovable.app
 
-## Sobre o projeto
+## Visão geral
 
-O AuraFit nasceu como um experimento de produto na interseção entre moda, IA e experiência mobile. A proposta é permitir que uma pessoa envie sua foto e a imagem de uma peça, gere uma visualização de virtual try-on e mantenha os resultados organizados para comparação.
+O AuraFit AI explora uma experiência de virtual try-on voltada tanto ao consumidor final quanto, futuramente, a lojas e operações de moda. O fluxo principal permite trabalhar com uma foto de modelo, uma peça de roupa e uma categoria para gerar e organizar experimentações visuais.
 
-O projeto também explora uma futura versão B2B para lojas físicas e e-commerces.
+Além da interface do consumidor, a arquitetura foi preparada para evoluir para cenários B2B, como catálogo de loja, QR Code no ponto de venda e gestão de experimentações.
 
-## Principais recursos
+## Funcionalidades
 
-- Experiência mobile-first
-- Upload de modelo e peça de roupa
-- Fluxo de geração de virtual try-on
-- Integração preparada com Fal.ai/FASHN
-- Autenticação e persistência com Supabase
-- Guarda-roupa e histórico de looks
-- Interface responsiva com foco em experiência premium
-- Estrutura preparada para expansão de categorias e uso comercial
+- interface mobile-first e responsiva;
+- upload e tratamento de imagens de modelo e vestuário;
+- fluxo de geração de virtual try-on;
+- integração preparada com **Fal.ai / FASHN**;
+- autenticação e persistência com **Supabase**;
+- guarda-roupa digital e histórico de looks;
+- fluxo público de experimentação por token;
+- estrutura de Studio para uso comercial;
+- validação de formulários e estados de erro;
+- arquitetura preparada para expansão de categorias e uso B2C/B2B.
 
 ## Stack
 
 - React 19
 - TypeScript
-- TanStack Start / Router / Query
+- TanStack Start
+- TanStack Router
+- TanStack Query
 - Vite
 - Tailwind CSS
 - Supabase
@@ -36,26 +40,30 @@ O projeto também explora uma futura versão B2B para lojas físicas e e-commerc
 
 ## Arquitetura e segurança
 
-As credenciais privadas não ficam versionadas. O projeto usa variáveis de ambiente e inclui apenas um `.env.example` com os nomes necessários para configuração local.
+O projeto separa interface, integrações e operações que exigem execução no servidor. Credenciais privadas não são versionadas no repositório: a configuração local é feita por variáveis de ambiente, com um `.env.example` contendo apenas os nomes esperados.
 
-Chamadas que dependem de chaves sensíveis são tratadas no lado servidor sempre que necessário, evitando expor segredos no cliente.
+Chamadas que dependem de chaves sensíveis são mantidas no lado servidor sempre que necessário, evitando exposição direta no cliente.
 
-## Rodando localmente
+## Executando localmente
 
 ```bash
-git clone <url-do-repositorio>
+git clone https://github.com/angelogabrielribeiro/digital-wardrobe-ai.git
 cd digital-wardrobe-ai
 npm install
 cp .env.example .env
 npm run dev
 ```
 
-Preencha as variáveis necessárias no `.env` antes de usar integrações externas.
+Preencha no `.env` apenas as variáveis necessárias para as integrações que deseja utilizar.
 
 ## Status
 
-🚧 **Em desenvolvimento.** O produto já possui uma base funcional e continua evoluindo em experiência, integrações de IA e arquitetura para uso B2C/B2B.
+**Em desenvolvimento ativo.** A aplicação possui uma base funcional publicada e continua evoluindo em experiência de virtual try-on, integrações de IA e arquitetura para uso comercial.
 
-## Objetivos técnicos do projeto
+## Objetivos técnicos
 
-Este projeto é usado para aprofundar conhecimentos em desenvolvimento web moderno, integração com APIs de IA, autenticação, persistência de dados, UX mobile-first e arquitetura de produto.
+Este projeto é utilizado para aprofundar conhecimentos em desenvolvimento web moderno, integração com APIs de IA, autenticação, persistência de dados, segurança de credenciais, UX mobile-first e arquitetura de produto.
+
+---
+
+Desenvolvido por **Angelo Gabriel Ribeiro Santos**.
